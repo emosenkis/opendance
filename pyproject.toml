@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opendance"
+version = "0.1.0"
+description = "A local, camera-powered dance game"
+readme = "README.md"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+    "PySide6==6.11.2",
+    "cyclopts==4.24.0",
+    "pygame-ce==2.5.8",
+]
+
+[project.optional-dependencies]
+vision = [
+    "lap==0.5.13",
+    "torch==2.14.0",
+    "torchvision==0.29.0",
+    "ultralytics-opencv-headless==8.4.142",
+]
+rtmpose = [
+    "onnxruntime-gpu[cuda,cudnn]==1.29.0",
+    "opencv-python-headless==5.0.0.93",
+    "rtmlib==0.0.16",
+    "tqdm==4.70.0",
+]
+
+# rtmlib declares both GUI OpenCV wheels and CPU ONNX Runtime. OpenDance uses
+# the compatible headless OpenCV and GPU runtime directly instead.
+[tool.uv]
+exclude-dependencies = [
+    { package = { name = "rtmlib", version = "0.0.16" }, dependencies = ["onnxruntime", "opencv-contrib-python", "opencv-python"] },
+]
+
+# PyPI's Windows torch wheel is CPU-only. Linux's PyPI wheel already carries
+# CUDA 13.0, so only Windows needs the dedicated upstream index.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[project.scripts]
+opendance = "opendance.app:main"
+opendance-extract = "opendance.extract:main"
+opendance-player = "opendance.player:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+opendance = [
+    "qml/**/*.qml",
+    "content/*.json",
+    "assets/*.svg",
+    "assets/audio/*.ogg",
+    "assets/audio/stingers/*.ogg",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

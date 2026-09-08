@@ -1,0 +1,122 @@
+import QtQuick
+import QtQuick.Controls
+
+Item {
+    id: root
+
+    property var feedback: null
+    property bool reducedMotion: false
+
+    function value(name, fallback) {
+        return feedback && feedback[name] !== undefined ? feedback[name] : fallback
+    }
+
+    function feedbackColor() {
+        var rating = String(value("grade", value("rating", value("text", "")))).toLowerCase()
+        if (rating.indexOf("perfect") >= 0)
+            return "#ffe66d"
+        if (rating.indexOf("great") >= 0)
+            return "#55f7ff"
+        if (rating.indexOf("good") >= 0)
+            return "#7cff9b"
+        return "#ff70d5"
+    }
+
+    function showFeedback() {
+        var message = value("grade", value("text", value("rating", "")))
+        if (!message)
+            return
+        ratingLabel.text = String(message).toUpperCase()
+        pointsLabel.text = value("points", 0) > 0 ? "+" + value("points", 0) : ""
+        burst.stop()
+        quietTimer.stop()
+        if (reducedMotion) {
+            root.opacity = 1
+            root.scale = 1
+            quietTimer.restart()
+        } else {
+            burst.restart()
+        }
+    }
+
+    width: 270
+    height: 160
+    opacity: 0
+    scale: 0.5
+
+    Repeater {
+        model: 10
+
+        Rectangle {
+            required property int index
+
+            width: index % 3 === 0 ? 18 : 8
+            height: width
+            radius: index % 2 === 0 ? width / 2 : 2
+            color: index % 2 === 0 ? root.feedbackColor() : "#ffffff"
+            x: root.width / 2 + Math.cos(index * 0.628) * (52 + (index % 3) * 18) - width / 2
+            y: root.height / 2 + Math.sin(index * 0.628) * (48 + (index % 3) * 14) - height / 2
+            rotation: index * 31
+        }
+    }
+
+    Column {
+        anchors.centerIn: parent
+        spacing: -4
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: "PLAYER " + Number(root.value("player_number", Number(root.value("slot", 0)) + 1))
+            color: "#ffffff"
+            font.pixelSize: 11
+            font.weight: Font.Black
+            font.letterSpacing: 1.2
+        }
+
+        Label {
+            id: ratingLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: root.feedbackColor()
+            font.pixelSize: 34
+            font.weight: Font.Black
+            font.letterSpacing: 2
+            style: Text.Outline
+            styleColor: "#87080b13"
+        }
+
+        Label {
+            id: pointsLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: "#ffffff"
+            font.pixelSize: 18
+            font.weight: Font.Bold
+        }
+    }
+
+    SequentialAnimation {
+        id: burst
+        ScriptAction {
+            script: {
+                root.opacity = 1
+                root.scale = 0.72
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "scale"; to: 1.15; duration: 190; easing.type: Easing.OutBack }
+        }
+        PauseAnimation { duration: 620 }
+        ParallelAnimation {
+            NumberAnimation { target: root; property: "opacity"; to: 0; duration: 260 }
+            NumberAnimation { target: root; property: "scale"; to: 1.35; duration: 260; easing.type: Easing.InQuad }
+        }
+    }
+
+    Timer {
+        id: quietTimer
+        interval: 700
+        onTriggered: root.opacity = 0
+    }
+
+    onFeedbackChanged: showFeedback()
+    Component.onCompleted: showFeedback()
+}

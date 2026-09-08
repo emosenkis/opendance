@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  UV_VERSION: "0.12.7"
+  GH_REPO: ${{ github.repository }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$RELEASE_TAG" == v* ]]
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --draft --verify-tag --generate-notes --title "OpenDance $RELEASE_TAG"
+
+  linux:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Free space for the CUDA image
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          docker system prune --all --force
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and publish CUDA container
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          version="${RELEASE_TAG#v}"
+          docker build -f Containerfile \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$version" \
+            -t "$image:$version" -t "$image:latest" .
+          docker run --rm "$image:$version" opendance-extract --diagnostics
+          docker push "$image:$version"
+          docker push "$image:latest"
+          mkdir release
+          printf 'GPU image: %s\n\nPull: docker pull %s\nRun: see the Immutable Linux section in README.md.\n' \
+            "$image:$version" "$image:$version" > "release/OpenDance-$version-linux-GPU-container.txt"
+      - name: Upload Linux instructions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release/* --clobber
+
+  windows:
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - run: choco install innosetup --no-progress -y
+      - name: Build CUDA installer
+        shell: pwsh
+        run: |
+          $Version = $env:RELEASE_TAG.TrimStart('v')
+          packaging\build_windows.ps1 -Version $Version
+      - name: Upload release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          Get-ChildItem release | ForEach-Object { gh release upload $env:RELEASE_TAG $_.FullName --clobber }
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --latest
