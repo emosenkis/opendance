@@ -21,6 +21,9 @@ jobs:
         with:
           version: "0.12.7"
           enable-cache: true
+      - name: Install Qt loader library
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev --python 3.12
       - run: uv run python -m unittest discover -s tests -v
