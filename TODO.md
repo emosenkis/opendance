@@ -130,9 +130,9 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   false detections are not automatically added.
 - [x] Keep the camera pose loop available from the initial library for hands-free
   control, while throttling non-game inference.
-- [ ] Move most or all setup options into a dedicated settings screen; explain
+- [x] Move most or all setup options into a dedicated settings screen; explain
   camera framing plainly or calibrate it automatically when reliable.
-- [ ] Keep the settings screen populated and navigation-tested at both supported
+- [x] Keep the settings screen populated and navigation-tested at both supported
   window sizes; never route to a background-only/blank page.
 - [ ] Play an interesting short audio/video preview inside the selected song
   card, with an audio fade-in and fade-out.

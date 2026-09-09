@@ -16,7 +16,7 @@ ApplicationWindow {
     title: backend.presentationMode ? "OpenDance Player — " + itemValue(song, "title", "Song")
                                     : "OpenDance"
 
-    property bool reducedMotion: false
+    readonly property bool reducedMotion: backend.reducedMotion
     readonly property real uiScale: Math.max(0.72, Math.min(width / 1280, height / 720))
     readonly property string screenName: String(backend.screen || "library").toLowerCase() === "game"
                                          ? "play" : String(backend.screen || "library").toLowerCase()
@@ -101,6 +101,8 @@ ApplicationWindow {
             songList.forceActiveFocus()
         else if (screenName === "setup")
             setupBackButton.forceActiveFocus()
+        else if (screenName === "settings")
+            settingsBackButton.forceActiveFocus()
         else if (screenName === "play" && backend.paused)
             resumeButton.forceActiveFocus()
         else if (screenName === "results")
@@ -132,6 +134,8 @@ ApplicationWindow {
                 backend.leaveGame()
             else
                 backend.togglePause()
+        } else if (screenName === "settings") {
+            backend.closeSettings()
         } else if (screenName === "setup" || screenName === "results") {
             backend.goLibrary()
         } else if (screenName === "countdown") {
@@ -144,11 +148,11 @@ ApplicationWindow {
             backend.togglePause()
             return
         }
-        if (screenName === "library") {
+        var item = activeFocusItem
+        if (screenName === "library" && (!item || item === songList)) {
             backend.openSetup()
             return
         }
-        var item = activeFocusItem
         if (item && typeof item.click === "function")
             item.click()
         else if (item && typeof item.clicked === "function")
@@ -335,7 +339,8 @@ ApplicationWindow {
         currentIndex: window.screenName === "setup" ? 1
                     : window.screenName === "countdown" ? 2
                     : window.screenName === "play" ? 3
-                    : window.screenName === "results" ? 4 : 0
+                    : window.screenName === "results" ? 4
+                    : window.screenName === "settings" ? 5 : 0
         focus: true
 
         // SONG LIBRARY -------------------------------------------------------
@@ -424,6 +429,13 @@ ApplicationWindow {
                                 font.letterSpacing: 0.8
                             }
                         }
+                    }
+
+                    NeonButton {
+                        text: "SETTINGS"
+                        compact: true
+                        accent: "#55f7ff"
+                        onClicked: backend.openSettings()
                     }
 
                     NeonButton {
@@ -721,6 +733,13 @@ ApplicationWindow {
                         onClicked: backend.goLibrary()
                     }
 
+                    NeonButton {
+                        text: "SETTINGS"
+                        compact: true
+                        accent: "#55f7ff"
+                        onClicked: backend.openSettings()
+                    }
+
                     Column {
                         Layout.fillWidth: true
                         spacing: 0
@@ -1006,122 +1025,6 @@ ApplicationWindow {
                                         width: backend.alternateSourcesEnabled
                                                ? (parent.width - 8) * 0.42 : parent.width
                                         onClicked: backend.refreshCameras()
-                                    }
-                                }
-
-                                Label {
-                                    text: "INPUT TIMING"
-                                    color: "#ffffff"
-                                    font.pixelSize: 12 * window.uiScale
-                                    font.weight: Font.Black
-                                    font.letterSpacing: 1.4
-                                }
-
-                                Row {
-                                    width: parent.width
-                                    spacing: 8
-
-                                    NeonButton {
-                                        text: "−20 MS"
-                                        compact: true
-                                        width: 88 * window.uiScale
-                                        accent: "#9c7cff"
-                                        onClicked: window.setOption("latencyMs", backend.latencyMs - 20)
-                                    }
-
-                                    Label {
-                                        width: parent.width - 192 * window.uiScale
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: (backend.latencyMs >= 0 ? "+" : "") + backend.latencyMs + " MS"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        color: "#ffe66d"
-                                        font.pixelSize: 13 * window.uiScale
-                                        font.weight: Font.Black
-                                    }
-
-                                    NeonButton {
-                                        text: "+20 MS"
-                                        compact: true
-                                        width: 88 * window.uiScale
-                                        accent: "#9c7cff"
-                                        onClicked: window.setOption("latencyMs", backend.latencyMs + 20)
-                                    }
-                                }
-
-                                Label {
-                                    text: "CAMERA FRAMING"
-                                    color: "#ffffff"
-                                    font.pixelSize: 12 * window.uiScale
-                                    font.weight: Font.Black
-                                    font.letterSpacing: 1.4
-                                }
-
-                                Row {
-                                    width: parent.width
-                                    spacing: 8
-
-                                    NeonButton {
-                                        text: "−5%"
-                                        compact: true
-                                        width: 76 * window.uiScale
-                                        accent: "#55f7ff"
-                                        onClicked: window.setOption("framingHeight", backend.framingHeight - 0.05)
-                                    }
-
-                                    Label {
-                                        width: parent.width - 168 * window.uiScale
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        text: Math.round(Number(backend.framingHeight || 0.72) * 100) + "% BODY HEIGHT"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        color: "#7cff9b"
-                                        font.pixelSize: 11 * window.uiScale
-                                        font.weight: Font.Black
-                                    }
-
-                                    NeonButton {
-                                        text: "+5%"
-                                        compact: true
-                                        width: 76 * window.uiScale
-                                        accent: "#55f7ff"
-                                        onClicked: window.setOption("framingHeight", backend.framingHeight + 0.05)
-                                    }
-                                }
-
-                                NeonSwitch {
-                                    width: parent.width
-                                    text: "UPCOMING MOVE CUES"
-                                    description: "Show the next pose before it lands"
-                                    checked: backend.cuesEnabled
-                                    accent: "#55f7ff"
-                                    onToggled: window.setOption("cues", checked)
-                                }
-
-                                NeonSwitch {
-                                    width: parent.width
-                                    text: "MINI POSE VIEW"
-                                    description: "Keep your detected skeleton on screen"
-                                    checked: backend.miniViewEnabled
-                                    accent: "#ff4fcb"
-                                    onToggled: window.setOption("miniView", checked)
-                                }
-
-                                NeonSwitch {
-                                    width: parent.width
-                                    text: "JOIN GESTURE ONLY"
-                                    description: "Hold both hands overhead to enter the game"
-                                    checked: backend.joinGestureOnly
-                                    accent: "#ffe66d"
-                                    onToggled: window.setOption("joinGestureOnly", checked)
-                                }
-
-                                NeonSwitch {
-                                    width: parent.width
-                                    text: "REDUCE MOTION"
-                                    description: "Calmer menus and feedback effects"
-                                    checked: window.reducedMotion
-                                    accent: "#9c7cff"
-                                    onToggled: {
-                                        window.reducedMotion = checked
                                     }
                                 }
 
@@ -1871,6 +1774,264 @@ ApplicationWindow {
                         to: index % 2 ? 360 : -360
                         duration: 1800 + index * 20
                         loops: Animation.Infinite
+                    }
+                }
+            }
+        }
+
+        // SETTINGS -----------------------------------------------------------
+        Item {
+            id: settingsPage
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 28 * window.uiScale
+                spacing: 14 * window.uiScale
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 54 * window.uiScale
+                    spacing: 14 * window.uiScale
+
+                    NeonButton {
+                        id: settingsBackButton
+                        text: "\u2190 BACK"
+                        compact: true
+                        accent: "#9c7cff"
+                        onClicked: backend.closeSettings()
+                    }
+
+                    Column {
+                        Layout.fillWidth: true
+                        spacing: 0
+
+                        Label {
+                            text: "SETTINGS"
+                            color: "#ffffff"
+                            font.pixelSize: 27 * window.uiScale
+                            font.weight: Font.Black
+                            font.letterSpacing: 1.7
+                        }
+
+                        Label {
+                            text: "Tune the room once, then just dance."
+                            color: "#8f9bb1"
+                            font.pixelSize: 11 * window.uiScale
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 16 * window.uiScale
+
+                    GlassPanel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        accent: "#55f7ff"
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 22 * window.uiScale
+                            spacing: 8 * window.uiScale
+
+                            Label {
+                                text: "AUDIO"
+                                color: "#55f7ff"
+                                font.pixelSize: 12 * window.uiScale
+                                font.weight: Font.Black
+                                font.letterSpacing: 1.5
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                NeonButton {
+                                    text: "\u22125%"
+                                    compact: true
+                                    Layout.preferredWidth: 82 * window.uiScale
+                                    accent: "#55f7ff"
+                                    onClicked: window.setOption("volume", backend.volume - 0.05)
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: Math.round(Number(backend.volume || 0) * 100) + "% VOLUME"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    color: "#ffffff"
+                                    font.pixelSize: 13 * window.uiScale
+                                    font.weight: Font.Black
+                                }
+
+                                NeonButton {
+                                    text: "+5%"
+                                    compact: true
+                                    Layout.preferredWidth: 82 * window.uiScale
+                                    accent: "#55f7ff"
+                                    onClicked: window.setOption("volume", backend.volume + 0.05)
+                                }
+                            }
+
+                            Label {
+                                text: "INPUT TIMING"
+                                color: "#ffe66d"
+                                font.pixelSize: 12 * window.uiScale
+                                font.weight: Font.Black
+                                font.letterSpacing: 1.5
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Shift scoring only if your camera consistently feels early or late."
+                                wrapMode: Text.WordWrap
+                                color: "#8f9bb1"
+                                font.pixelSize: 10 * window.uiScale
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                NeonButton {
+                                    text: "\u221220 MS"
+                                    compact: true
+                                    Layout.preferredWidth: 90 * window.uiScale
+                                    accent: "#9c7cff"
+                                    onClicked: window.setOption("latencyMs", backend.latencyMs - 20)
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: (backend.latencyMs >= 0 ? "+" : "") + backend.latencyMs + " MS"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    color: "#ffe66d"
+                                    font.pixelSize: 13 * window.uiScale
+                                    font.weight: Font.Black
+                                }
+
+                                NeonButton {
+                                    text: "+20 MS"
+                                    compact: true
+                                    Layout.preferredWidth: 90 * window.uiScale
+                                    accent: "#9c7cff"
+                                    onClicked: window.setOption("latencyMs", backend.latencyMs + 20)
+                                }
+                            }
+
+                            Label {
+                                text: "CAMERA FRAMING"
+                                color: "#7cff9b"
+                                font.pixelSize: 12 * window.uiScale
+                                font.weight: Font.Black
+                                font.letterSpacing: 1.5
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: "This is your target full-body height in the camera frame. The setup preview tells each player to move forward or back."
+                                wrapMode: Text.WordWrap
+                                color: "#8f9bb1"
+                                font.pixelSize: 10 * window.uiScale
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+
+                                NeonButton {
+                                    text: "\u22125%"
+                                    compact: true
+                                    Layout.preferredWidth: 82 * window.uiScale
+                                    accent: "#7cff9b"
+                                    onClicked: window.setOption("framingHeight", backend.framingHeight - 0.05)
+                                }
+
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: Math.round(Number(backend.framingHeight || 0.72) * 100) + "% OF FRAME"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    color: "#7cff9b"
+                                    font.pixelSize: 13 * window.uiScale
+                                    font.weight: Font.Black
+                                }
+
+                                NeonButton {
+                                    text: "+5%"
+                                    compact: true
+                                    Layout.preferredWidth: 82 * window.uiScale
+                                    accent: "#7cff9b"
+                                    onClicked: window.setOption("framingHeight", backend.framingHeight + 0.05)
+                                }
+                            }
+
+                            Item { Layout.fillHeight: true }
+                        }
+                    }
+
+                    GlassPanel {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        accent: "#ff4fcb"
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 22 * window.uiScale
+                            spacing: 8 * window.uiScale
+
+                            Label {
+                                text: "PLAY EXPERIENCE"
+                                color: "#ff70d5"
+                                font.pixelSize: 12 * window.uiScale
+                                font.weight: Font.Black
+                                font.letterSpacing: 1.5
+                            }
+
+                            NeonSwitch {
+                                Layout.fillWidth: true
+                                text: "UPCOMING MOVE CUES"
+                                description: "Show one move ahead while dancing"
+                                checked: backend.cuesEnabled
+                                accent: "#55f7ff"
+                                onToggled: window.setOption("cues", checked)
+                            }
+
+                            NeonSwitch {
+                                Layout.fillWidth: true
+                                text: "MINI POSE VIEW"
+                                description: "Keep your detected skeleton on screen"
+                                checked: backend.miniViewEnabled
+                                accent: "#ff4fcb"
+                                onToggled: window.setOption("miniView", checked)
+                            }
+
+                            NeonSwitch {
+                                Layout.fillWidth: true
+                                text: "JOIN GESTURE ONLY"
+                                description: "Hold both hands overhead before entering"
+                                checked: backend.joinGestureOnly
+                                accent: "#ffe66d"
+                                onToggled: window.setOption("joinGestureOnly", checked)
+                            }
+
+                            NeonSwitch {
+                                Layout.fillWidth: true
+                                text: "REDUCE MOTION"
+                                description: "Calmer menus and feedback effects"
+                                checked: backend.reducedMotion
+                                accent: "#9c7cff"
+                                onToggled: window.setOption("reducedMotion", checked)
+                            }
+
+                            Item { Layout.fillHeight: true }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Changes are saved automatically on this computer."
+                                wrapMode: Text.WordWrap
+                                color: "#77839a"
+                                font.pixelSize: 10 * window.uiScale
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
                     }
                 }
             }

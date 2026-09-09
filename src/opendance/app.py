@@ -317,6 +317,7 @@ class Backend(QObject):
         self._presentation_video = bool(presentation_video)
         self._presentation_finished = False
         self._screen = "game" if self._presentation_mode else "library"
+        self._settings_return_screen = "library"
         self._catalog = [dict(presentation_song)] if presentation_song else self._load_songs()
         self._loaded_song_index = 0 if self._presentation_mode else -1
         self._loaded_song = self._catalog[0] if self._presentation_mode else None
@@ -403,6 +404,9 @@ class Backend(QObject):
         self._cues = self.settings.value("game/cues", True, type=bool)
         self._mini = False if self._presentation_mode else self.settings.value(
             "game/mini_view", True, type=bool
+        )
+        self._reduced_motion = self.settings.value(
+            "ui/reduced_motion", False, type=bool
         )
         self._max_players = MAX_PLAYERS
         self._gestures = GestureController(
@@ -692,6 +696,14 @@ class Backend(QObject):
     def miniViewEnabled(self) -> bool:
         return self._mini
 
+    @Property(float, notify=changed)
+    def volume(self) -> float:
+        return self._volume
+
+    @Property(bool, notify=changed)
+    def reducedMotion(self) -> bool:
+        return self._reduced_motion
+
     @Property(str, notify=changed)
     def coachMode(self) -> str:
         return "video" if self._shows_coach_video() else "avatar"
@@ -732,6 +744,21 @@ class Backend(QObject):
         self._song_time = 0.0
         self.refreshCameras()
         self._apply_source()
+        self.changed.emit()
+
+    @Slot()
+    def openSettings(self) -> None:
+        if self._presentation_mode or self._screen not in {"library", "setup"}:
+            return
+        self._settings_return_screen = self._screen
+        self._screen = "settings"
+        self.changed.emit()
+
+    @Slot()
+    def closeSettings(self) -> None:
+        if self._screen != "settings":
+            return
+        self._screen = self._settings_return_screen
         self.changed.emit()
 
     @Slot(QObject)
@@ -1004,6 +1031,9 @@ class Backend(QObject):
             for effect in self._stingers.values():
                 effect.set_volume(volume)
             self.settings.setValue("audio/volume", volume)
+        elif name == "reducedMotion":
+            self._reduced_motion = bool(value)
+            self.settings.setValue("ui/reduced_motion", self._reduced_motion)
         self.changed.emit()
 
     @Slot()
@@ -1014,7 +1044,7 @@ class Backend(QObject):
     def _capture_frame(self, frame: Any) -> None:
         now_ms = time.monotonic() * 1000.0
         # Keep 30 fps sources intact; the size-one queue drops excess 60 fps frames.
-        interval_ms = 90.0 if self._screen in ("library", "results") else 30.0
+        interval_ms = 90.0 if self._screen in ("library", "settings", "results") else 30.0
         if not frame.isValid() or now_ms - self._last_frame_ms < interval_ms:
             return
         self._last_frame_ms = now_ms
@@ -1037,7 +1067,7 @@ class Backend(QObject):
         self._last_inference_at = now
         self._pose_people = list(result.get("people", []))
         events = self._gestures.update(self._pose_people, now)
-        if self._screen in ("library", "setup", "results") or (
+        if self._screen in ("library", "setup", "settings", "results") or (
             self._screen == "game" and self._paused
         ):
             for event in events:
