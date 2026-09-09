@@ -103,8 +103,8 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [ ] Replace frame-by-frame pose-copy scoring with dance-move segmentation and
   score whether each player performs the authored motion, without depending on
   their starting location, camera position, or apparent size in the frame.
-- [ ] Put scoring and judgement feedback in a row across the top; allow each
-  song to shrink/inset its video to avoid that row while defaulting video scale
+- [x] Put scoring and judgement feedback in the active-player row across the
+  top; allow each song to shrink/inset its video while defaulting video scale
   to 100%.
 - [ ] Change heads-up cues from a constant N-seconds-ahead live pose to the next
   discrete segmented dance move.

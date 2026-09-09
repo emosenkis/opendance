@@ -1239,7 +1239,7 @@ class Backend(QObject):
         if new_feedback:
             self._feedback = [
                 item if isinstance(item, dict) else vars(item) for item in new_feedback
-            ][-4:]
+            ][-self._max_players :]
             self.feedbackChanged.emit()
             best = max(new_feedback, key=lambda item: item.points).grade.lower()
             self._play_stinger("good" if best == "ok" else best)

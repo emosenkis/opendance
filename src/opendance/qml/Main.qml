@@ -24,6 +24,7 @@ ApplicationWindow {
     readonly property bool setupScreen: screenName === "setup"
     readonly property var song: backend.selectedSong || ({})
     readonly property var playerList: backend.players || []
+    readonly property real videoScale: clamped(itemValue(song, "video_scale", 1.0), 0.5, 1.0)
     readonly property bool selectedSongLocked: itemValue(song, "locked", false)
                                                 || itemValue(song, "unlocked", true) === false
 
@@ -54,11 +55,11 @@ ApplicationWindow {
         return ["#55f7ff", "#ff4fcb", "#ffe66d", "#7cff9b", "#ff855f", "#b896ff"][index % 6]
     }
 
-    function playerForSlot(index) {
-        for (var playerIndex = 0; playerIndex < playerList.length; ++playerIndex) {
-            var player = playerList[playerIndex]
-            if (Number(itemValue(player, "slot", playerIndex)) === index)
-                return player
+    function feedbackForSlot(slot) {
+        var items = backend.feedback || []
+        for (var index = items.length - 1; index >= 0; --index) {
+            if (Number(itemValue(items[index], "slot", -1)) === slot)
+                return items[index]
         }
         return null
     }
@@ -259,7 +260,9 @@ ApplicationWindow {
     // down the playback pipeline.
     VideoOutput {
         id: coachVideo
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: parent.width * window.videoScale
+        height: parent.height * window.videoScale
         visible: window.gameplayScreen && backend.coachMode === "video"
         fillMode: backend.presentationMode ? VideoOutput.PreserveAspectFit
                                            : VideoOutput.PreserveAspectCrop
@@ -312,8 +315,8 @@ ApplicationWindow {
     }
 
     SkeletonView {
-        x: coachVideo.contentRect.x
-        y: coachVideo.contentRect.y
+        x: coachVideo.x + coachVideo.contentRect.x
+        y: coachVideo.y + coachVideo.contentRect.y
         width: coachVideo.contentRect.width
         height: coachVideo.contentRect.height
         visible: window.gameplayScreen && backend.presentationMode
@@ -1302,7 +1305,11 @@ ApplicationWindow {
                             player: modelData
                             playerNumber: Number(window.itemValue(modelData, "player_number",
                                                                    playerSlot + 1))
-                            playerColor: window.playerColor(playerSlot)
+                            playerColor: window.playerColor(Number(window.itemValue(
+                                                                      modelData,
+                                                                      "dancer_index",
+                                                                      playerSlot)))
+                            feedback: window.feedbackForSlot(playerSlot)
                             reducedMotion: window.reducedMotion
                         }
                     }
@@ -1353,22 +1360,6 @@ ApplicationWindow {
                 Item {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-
-                    Repeater {
-                        model: backend.feedback || []
-
-                        FeedbackBurst {
-                            required property var modelData
-                            x: Math.max(0, Math.min(parent.width - width,
-                                                   (Number(modelData.slot) + 0.5)
-                                                   * parent.width / Number(backend.maxPlayers || 4)
-                                                   - width / 2))
-                            y: Math.max(0, parent.height * 0.42 - height / 2)
-                            z: 20
-                            feedback: modelData
-                            reducedMotion: window.reducedMotion
-                        }
-                    }
 
                     GlassPanel {
                         id: cuePanel
@@ -1424,7 +1415,7 @@ ApplicationWindow {
                                     anchors.margins: 5
                                     people: playPage.visible && cuePanel.visible
                                             ? backend.cueDancers : null
-                                    lineColor: "#ffe66d"
+                                    lineColor: window.playerColor(0)
                                     mirror: false
                                     showBoxes: false
                                     showLabels: false
@@ -1920,7 +1911,9 @@ ApplicationWindow {
             y: cameraPreview.contentRect.y + inset
             width: Math.max(0, cameraPreview.contentRect.width - inset * 2)
             height: Math.max(0, cameraPreview.contentRect.height - inset * 2)
-            people: cameraFeed.visible ? backend.posePeople : null
+            people: cameraFeed.visible
+                    ? (window.setupScreen ? backend.posePeople : window.playerList)
+                    : null
             lineColor: "#55f7ff"
             mirror: true
             showBoxes: window.setupScreen

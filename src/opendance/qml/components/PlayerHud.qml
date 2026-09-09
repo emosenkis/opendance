@@ -7,6 +7,7 @@ GlassPanel {
     property var player: null
     property int playerNumber: 1
     property color playerColor: playerNumber === 1 ? "#55f7ff" : "#ff4fcb"
+    property var feedback: null
     property bool reducedMotion: false
     readonly property real contentScale: Math.min(1, height / 96)
 
@@ -92,5 +93,13 @@ GlassPanel {
                 animateChanges: !root.reducedMotion
             }
         }
+    }
+
+    FeedbackBurst {
+        anchors.fill: parent
+        z: 2
+        compact: true
+        feedback: root.feedback
+        reducedMotion: root.reducedMotion
     }
 }
