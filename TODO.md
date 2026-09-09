@@ -31,6 +31,8 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [x] Discover and select among multiple cameras, preferring recognized USB
   cameras over an integrated laptop camera by default while remembering an
   explicit choice.
+- [ ] Actually start the visibly selected default/only camera when setup opens;
+  do not require clicking the already-selected camera first.
 - [x] Accept a video file through the same decoded-frame pose pipeline as a
   simulated webcam, without requiring a virtual-camera utility.
 - [x] Hide video-file and simulated-dancer sources unless enabled by a Cyclopts
@@ -130,6 +132,8 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   control, while throttling non-game inference.
 - [ ] Move most or all setup options into a dedicated settings screen; explain
   camera framing plainly or calibrate it automatically when reliable.
+- [ ] Keep the settings screen populated and navigation-tested at both supported
+  window sizes; never route to a background-only/blank page.
 - [ ] Play an interesting short audio/video preview inside the selected song
   card, with an audio fade-in and fade-out.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
@@ -139,6 +143,11 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 
 - [x] Import optional LRC lyrics and optionally copy the original video into a
   song package.
+- [ ] Add extractor flags to trim independently from the beginning and end while
+  keeping choreography, media timing, lyrics, and duration aligned.
+- [ ] Add a song option to hide an opening portion of video behind a fun intro
+  visualization, retain its audio, and exclude that hidden portion from pose
+  capture/scoring.
 - [x] Add a standalone extracted-song player for audio, poses, and optional
   original video behind the poses; reuse the game's media/choreography playback
   code rather than duplicating non-trivial logic.
