@@ -3,7 +3,24 @@ import unittest
 from unittest.mock import patch
 
 from opendance.app import framing_nudge
-from opendance.vision import PoseEngine, RTMPoseEngine, create_pose_engine
+from opendance.vision import (
+    PoseEngine,
+    RTMPoseEngine,
+    create_pose_engine,
+    is_player_detection,
+)
+
+
+def player_detection(confidence=0.9, visible=range(17)):
+    visible = set(visible)
+    return {
+        "confidence": confidence,
+        "bbox": [0.2, 0.1, 0.4, 0.8],
+        "keypoints": [
+            [0.4, 0.05 + index * 0.05, 0.9 if index in visible else 0.1]
+            for index in range(17)
+        ],
+    }
 
 
 class PoseDiagnosticsTest(unittest.TestCase):
@@ -31,6 +48,45 @@ class PoseDiagnosticsTest(unittest.TestCase):
         result = engine.process(SimpleNamespace(shape=(10, 20, 3)))
 
         self.assertEqual(result["device"], "cuda:0")
+
+    def test_player_detection_requires_confidence_count_and_body_coverage(self):
+        self.assertTrue(is_player_detection(player_detection()))
+        self.assertTrue(is_player_detection(player_detection(visible=range(5, 17))))
+        self.assertFalse(is_player_detection(player_detection(confidence=0.29)))
+        self.assertFalse(is_player_detection(player_detection(visible=range(7))))
+        self.assertFalse(is_player_detection(player_detection(visible=range(11))))
+
+    def test_yolo_filters_weak_people_before_temporal_smoothing(self):
+        points = [
+            [[40, 5 + index * 5, 0.9] for index in range(17)],
+            [[70, 5 + index * 5, 0.9] for index in range(17)],
+        ]
+        result = SimpleNamespace(
+            boxes=SimpleNamespace(
+                xyxy=[[20, 5, 60, 95], [55, 5, 95, 95]],
+                id=[1, 2],
+                conf=[0.9, 0.2],
+            ),
+            keypoints=SimpleNamespace(data=points),
+        )
+        model = SimpleNamespace(
+            predictor=SimpleNamespace(device="cpu"),
+            track=lambda *_args, **_kwargs: [result],
+        )
+        engine = PoseEngine("unused.pt", smooth_frames=0)
+        engine._model = model
+        smoothed = []
+
+        def smooth(people):
+            smoothed.extend(people)
+            return people
+
+        engine._pose_filter = SimpleNamespace(update=smooth)
+
+        people = engine.process(SimpleNamespace(shape=(100, 100, 3)))["people"]
+
+        self.assertEqual([person["track_id"] for person in people], [1])
+        self.assertEqual([person["track_id"] for person in smoothed], [1])
 
     def test_rtmpose_keeps_ids_when_detector_order_changes(self):
         state = {
@@ -79,6 +135,28 @@ class PoseDiagnosticsTest(unittest.TestCase):
         )
         result = engine.process(SimpleNamespace(shape=(100, 100, 3)))
         self.assertEqual(result["people"], [])
+
+    def test_rtmpose_filters_weak_people_before_spatial_tracking(self):
+        boxes = [[10, 5, 45, 95, 0.9], [55, 5, 90, 95, 0.2]]
+
+        def pose(_frame, *, bboxes):
+            self.assertEqual(bboxes, [box[:4] for box in boxes])
+            points = [
+                [[center, 5 + index * 5] for index in range(17)]
+                for center in (25, 75)
+            ]
+            return points, [[0.9] * 17, [0.9] * 17]
+
+        engine = RTMPoseEngine(device="cpu", max_people=2, smooth_frames=0)
+        engine._model = SimpleNamespace(
+            det_model=lambda _frame: boxes,
+            pose_model=pose,
+        )
+
+        people = engine.process(SimpleNamespace(shape=(100, 100, 3)))["people"]
+
+        self.assertEqual(len(people), 1)
+        self.assertEqual(len(engine._slots.visible_slots), 1)
 
 
 if __name__ == "__main__":

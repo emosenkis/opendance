@@ -37,7 +37,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   CLI flag or environment variable.
 - [x] Smooth ordinary live/extracted pose motion and hold implausible one-frame
   position/posture jumps for configurable confirmation frames.
-- [ ] Reject low-confidence person detections before admission using visible
+- [x] Reject low-confidence person detections before admission using visible
   keypoint count/coverage and detector confidence, so furniture, pets, and
   partial false positives do not become players.
 - [x] Reset extraction smoothing at detected scene cuts and smooth stable dancer

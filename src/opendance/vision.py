@@ -37,6 +37,16 @@ COCO17_KEYPOINTS = (
     "right_ankle",
 )
 
+_MIN_DETECTION_CONFIDENCE = 0.30
+_MIN_VISIBLE_KEYPOINT_CONFIDENCE = 0.25
+_MIN_VISIBLE_KEYPOINTS = 8
+_BODY_REGIONS = (
+    range(0, 5),  # head
+    range(5, 11),  # shoulders and arms
+    range(11, 13),  # hips
+    range(13, 17),  # legs
+)
+
 
 def _tolist(value: Any) -> list[Any]:
     """Convert a Torch/NumPy-like value without importing either package."""
@@ -54,7 +64,44 @@ def _tolist(value: Any) -> list[Any]:
 
 
 def _unit(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
+    number = float(value)
+    return max(0.0, min(1.0, number)) if math.isfinite(number) else 0.0
+
+
+def is_player_detection(person: dict[str, Any]) -> bool:
+    """Reject weak person-shaped detections before they can claim a player slot."""
+
+    try:
+        detector_confidence = float(person.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        return False
+    if (
+        not math.isfinite(detector_confidence)
+        or detector_confidence < _MIN_DETECTION_CONFIDENCE
+    ):
+        return False
+
+    points = person.get("keypoints", ())
+    try:
+        valid_length = len(points) == len(COCO17_KEYPOINTS)
+    except TypeError:
+        return False
+    if not valid_length:
+        return False
+    visible: set[int] = set()
+    for index, point in enumerate(points):
+        try:
+            x, y, confidence = float(point[0]), float(point[1]), float(point[2])
+        except (IndexError, TypeError, ValueError):
+            continue
+        if (
+            all(math.isfinite(value) for value in (x, y, confidence))
+            and confidence >= _MIN_VISIBLE_KEYPOINT_CONFIDENCE
+        ):
+            visible.add(index)
+    if len(visible) < _MIN_VISIBLE_KEYPOINTS:
+        return False
+    return sum(bool(visible.intersection(region)) for region in _BODY_REGIONS) >= 3
 
 
 def _copy_person(person: dict[str, Any]) -> dict[str, Any]:
@@ -526,7 +573,11 @@ class PoseEngine:
                 kwargs["device"] = self.device
             results = model.track(frame, **kwargs)
             result = results[0] if results else None
-            people = self._people(result, width, height)
+            people = [
+                person
+                for person in self._people(result, width, height)
+                if is_player_detection(person)
+            ]
             if self._pose_filter is not None:
                 people = self._pose_filter.update(people)
             device = str(
@@ -769,8 +820,11 @@ class RTMPoseEngine:
             inference_started = time.perf_counter()
             boxes = _tolist(model.det_model(frame))[: self.max_people]
             if boxes:
-                keypoints, scores = model.pose_model(frame, bboxes=boxes)
+                keypoints, scores = model.pose_model(
+                    frame, bboxes=[box[:4] for box in boxes]
+                )
                 people = self._people(boxes, keypoints, scores, width, height)
+                people = [person for person in people if is_player_detection(person)]
             else:
                 people = []
             now = timestamp_ms / 1_000.0 if timestamp_ms is not None else time.monotonic()
@@ -847,10 +901,14 @@ class RTMPoseEngine:
                 ]
                 for index, point in enumerate(points)
             ]
+            # rtmlib 0.0.16 strips YOLOX scores after applying its threshold.
+            # Four-coordinate boxes therefore carry the conservative guaranteed
+            # confidence floor; custom detectors may preserve the actual score.
+            detector_confidence = float(box[4]) if len(box) > 4 else 0.30
             people.append(
                 {
                     "track_id": None,
-                    "confidence": sum(point[2] for point in normalized) / len(normalized),
+                    "confidence": _unit(detector_confidence),
                     "bbox": [left, top, max(0.0, right - left), max(0.0, bottom - top)],
                     "keypoints": normalized,
                 }
@@ -881,4 +939,5 @@ __all__ = [
     "TemporalPoseFilter",
     "classify_pose_gesture",
     "create_pose_engine",
+    "is_player_detection",
 ]
