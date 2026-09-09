@@ -102,6 +102,14 @@ def _framing_height(value: Any) -> float:
     return max(0.5, min(0.9, height)) if math.isfinite(height) else 0.72
 
 
+def _song_seconds(song: dict[str, Any], key: str) -> float:
+    try:
+        value = float(song.get(key, 0.0))
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) and value >= 0 else 0.0
+
+
 def framing_nudge(bbox: Any, target_height: float = 0.72) -> str:
     """Return a camera-distance cue for one normalized ``x, y, w, h`` box."""
 
@@ -354,6 +362,9 @@ class Backend(QObject):
         self._music_player.setAudioOutput(self._music_audio)
         self._separate_audio = False
         self._clock_player = self._coach_player
+        self._media_start_s = 0.0
+        self._coach_seek_pending = False
+        self._music_seek_pending = False
         self._media_position_s = 0.0
         self._media_position_at: float | None = None
         self._has_song_media = False
@@ -585,6 +596,10 @@ class Backend(QObject):
     @Property(float, notify=changed)
     def songDuration(self) -> float:
         return float(self._selected_song_metadata.get("duration", 1.0))
+
+    @Property(float, notify=changed)
+    def videoHiddenUntil(self) -> float:
+        return _song_seconds(self._selected_song_metadata, "video_hidden_until")
 
     @Property(float, notify=gameFrameChanged)
     def progress(self) -> float:
@@ -935,10 +950,7 @@ class Backend(QObject):
         self._presentation_finished = False
         self._prepare_song()
         self._play_started_at = time.monotonic()
-        self._coach_player.setPosition(0)
-        self._music_player.setPosition(0)
-        self._coach_player.play()
-        self._music_player.play()
+        self._start_song_media()
         self.changed.emit()
 
     def _prepare_song(self) -> None:
@@ -955,14 +967,27 @@ class Backend(QObject):
         self._music_player.setSource(QUrl())
         self._separate_audio = bool(video and audio)
         self._clock_player = self._music_player if self._separate_audio else self._coach_player
+        self._media_start_s = _song_seconds(song, "media_start")
         self._media_position_s = 0.0
         self._media_position_at = None
         self._has_song_media = path is not None
         self._coach_audio.setMuted(self._separate_audio)
+        self._coach_seek_pending = path is not None
+        self._music_seek_pending = self._separate_audio
         if path is not None and path.is_file():
             self._coach_player.setSource(QUrl.fromLocalFile(str(path)))
         if self._separate_audio and audio is not None:
             self._music_player.setSource(QUrl.fromLocalFile(str(audio)))
+        start_ms = round(self._media_start_s * 1_000)
+        self._coach_player.setPosition(start_ms)
+        self._music_player.setPosition(start_ms)
+
+    def _start_song_media(self) -> None:
+        start_ms = round(self._media_start_s * 1_000)
+        self._coach_player.setPosition(start_ms)
+        self._music_player.setPosition(start_ms)
+        self._coach_player.play()
+        self._music_player.play()
 
     def _play_stinger(self, name: str) -> None:
         if effect := self._stingers.get(name):
@@ -981,7 +1006,10 @@ class Backend(QObject):
             now = time.monotonic()
             self._play_started_at = now - self._song_time
             if self._has_song_media:
-                self._media_position_s = max(0.0, self._clock_player.position() / 1_000.0)
+                self._media_position_s = max(
+                    0.0,
+                    self._clock_player.position() / 1_000.0 - self._media_start_s,
+                )
                 self._media_position_at = now
         (self._coach_player.pause if self._paused else self._coach_player.play)()
         (self._music_player.pause if self._paused else self._music_player.play)()
@@ -1114,7 +1142,25 @@ class Backend(QObject):
         self._model_status = status
         self.poseChanged.emit()
 
+    def _seek_loaded_media(self, player: QMediaPlayer, status: Any) -> None:
+        if status not in (
+            QMediaPlayer.MediaStatus.LoadedMedia,
+            QMediaPlayer.MediaStatus.BufferedMedia,
+        ):
+            return
+        pending_name = (
+            "_coach_seek_pending"
+            if player is self._coach_player
+            else "_music_seek_pending"
+        )
+        if not getattr(self, pending_name):
+            return
+        setattr(self, pending_name, False)
+        song_time = self._song_time if self._screen == "game" else 0.0
+        player.setPosition(round((self._media_start_s + song_time) * 1_000))
+
     def _coach_status(self, status: Any) -> None:
+        self._seek_loaded_media(self._coach_player, status)
         if (
             status == QMediaPlayer.MediaStatus.EndOfMedia
             and self._presentation_mode
@@ -1132,6 +1178,7 @@ class Backend(QObject):
             self._finish_game()
 
     def _music_status(self, status: Any) -> None:
+        self._seek_loaded_media(self._music_player, status)
         if (
             status == QMediaPlayer.MediaStatus.EndOfMedia
             and self._presentation_mode
@@ -1143,7 +1190,7 @@ class Backend(QObject):
     def _sync_media_position(self, player: QMediaPlayer, position_ms: int) -> None:
         if player is not self._clock_player or self._screen != "game":
             return
-        reported = max(0.0, float(position_ms) / 1_000.0)
+        reported = max(0.0, float(position_ms) / 1_000.0 - self._media_start_s)
         now = time.monotonic()
         if self._media_position_at is None:
             if reported <= 0.0:
@@ -1166,7 +1213,11 @@ class Backend(QObject):
             print(f"OpenDance coach video unavailable: {message}", file=sys.stderr, flush=True)
             audio = song_media_path(self._selected_song, "audio")
             if audio and not self._separate_audio:
+                self._coach_seek_pending = True
                 self._coach_player.setSource(QUrl.fromLocalFile(str(audio)))
+                self._coach_player.setPosition(
+                    round((self._media_start_s + self._song_time) * 1_000)
+                )
                 if self._screen == "game" and not self._paused:
                     self._coach_player.play()
             elif self._clock_player is self._coach_player:
@@ -1219,10 +1270,7 @@ class Backend(QObject):
             if elapsed >= 3.0:
                 self._screen = "game"
                 self._play_started_at = time.monotonic()
-                self._coach_player.setPosition(0)
-                self._music_player.setPosition(0)
-                self._coach_player.play()
-                self._music_player.play()
+                self._start_song_media()
                 if self._selected_source == "file":
                     self._source_player.play()
                 self.changed.emit()

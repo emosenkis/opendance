@@ -1,10 +1,12 @@
 import json
 from pathlib import Path
+import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from opendance.extract import _build_move_scoring, extract_song
+from opendance.extract import _build_move_scoring, analyze_video, extract_song
 from opendance.game import (
     GameSession,
     assign_dancers,
@@ -178,6 +180,154 @@ class MultiDancerTest(unittest.TestCase):
         self.assertEqual([item.grade for item in feedback], ["PERFECT", "PERFECT"])
         self.assertEqual(
             [player["dancer_index"] for player in session.ui_players()], [0, 1]
+        )
+
+    def test_video_analysis_does_not_infer_before_requested_time(self):
+        class Capture:
+            def __init__(self):
+                self.index = -1
+
+            def isOpened(self):
+                return True
+
+            def read(self):
+                self.index += 1
+                return (self.index < 10, self.index)
+
+            def get(self, field):
+                return {
+                    "fps": 1.0,
+                    "count": 10.0,
+                    "time": self.index * 1_000.0,
+                }[field]
+
+            def release(self):
+                pass
+
+        capture = Capture()
+        fake_cv2 = SimpleNamespace(
+            VideoCapture=lambda _path: capture,
+            CAP_PROP_FPS="fps",
+            CAP_PROP_FRAME_COUNT="count",
+            CAP_PROP_POS_MSEC="time",
+            INTER_AREA=0,
+            resize=lambda frame, _size, interpolation: frame,
+            absdiff=lambda first, second: SimpleNamespace(
+                mean=lambda: abs(first - second)
+            ),
+        )
+
+        class Engine:
+            def __init__(self):
+                self.calls = []
+
+            def reset_tracking(self):
+                pass
+
+            def process(self, frame, *, timestamp_ms):
+                self.calls.append((frame, timestamp_ms))
+                return {
+                    "source": {"width": 1, "height": 1},
+                    "people": [person(1, "ready", 0, [0.2, 0.1, 0.6, 0.8])],
+                    "timing": {},
+                }
+
+        engine = Engine()
+        with TemporaryDirectory() as directory:
+            video = Path(directory) / "video.mp4"
+            video.touch()
+            with patch.dict(sys.modules, {"cv2": fake_cv2}):
+                result = analyze_video(
+                    video,
+                    engine,
+                    skip_before_s=3,
+                    trim_end_s=2,
+                    show_progress=False,
+                )
+
+        self.assertEqual([frame for frame, _time in engine.calls], list(range(3, 8)))
+        self.assertEqual(result["frames"][0]["timestamp_ms"], 3_000)
+        self.assertEqual(result["source"]["duration_ms"], 10_000)
+        self.assertEqual(result["source"]["analyzed_frame_count"], 5)
+
+    def test_extractor_retimes_trimmed_media_lyrics_and_hidden_intro(self):
+        analysis = {
+            "source": {
+                "path": "/video.mp4",
+                "width": 1280,
+                "height": 720,
+                "fps": 1.0,
+                "reported_frame_count": 10,
+                "decoded_frame_count": 10,
+                "analyzed_frame_count": 4,
+                "duration_ms": 10_000.0,
+            },
+            "frames": [
+                {
+                    "frame": index,
+                    "timestamp_ms": timestamp * 1_000.0,
+                    "people": [person(11, "ready", 0, [0.2, 0.1, 0.6, 0.8])],
+                    "timing": {},
+                }
+                for index, timestamp in enumerate((3, 4, 7, 8))
+            ],
+            "processing": {"elapsed_seconds": 1.0, "average_fps": 4.0},
+        }
+        engine = SimpleNamespace(
+            model_name="pose.pt",
+            imgsz=640,
+            device="cpu",
+            max_people=1,
+            smooth_frames=0,
+        )
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "video.mp4"
+            source.touch()
+            lrc = root / "lyrics.lrc"
+            lrc.write_text(
+                "[00:01.00]Opening\n[00:03.00]Dance\n[00:08.00]End\n[00:09.00]Outro\n",
+                encoding="utf-8",
+            )
+            with patch("opendance.extract.analyze_video", return_value=analysis) as mocked:
+                output = extract_song(
+                    source,
+                    root / "song",
+                    engine=engine,
+                    lrc=lrc,
+                    trim_start=2,
+                    trim_end=2,
+                    hide_video_intro=1,
+                    show_progress=False,
+                )
+            song = json.loads(output.read_text(encoding="utf-8"))
+
+        mocked.assert_called_once_with(
+            source,
+            engine,
+            skip_before_s=3.0,
+            trim_end_s=2.0,
+            show_progress=False,
+        )
+        self.assertEqual(song["duration"], 6)
+        self.assertEqual(song["media_start"], 2)
+        self.assertEqual(song["video_hidden_until"], 1)
+        self.assertEqual(song["lyrics"], [
+            {"time": 0.0, "text": "Opening"},
+            {"time": 1.0, "text": "Dance"},
+        ])
+        self.assertEqual(
+            [frame["timestamp_ms"] for frame in song["choreography"]["timeline"]],
+            [1_000, 2_000, 5_000],
+        )
+        source_metadata = song["choreography"]["source"]
+        self.assertEqual(source_metadata["original_duration_ms"], 10_000)
+        self.assertEqual(source_metadata["duration_ms"], 6_000)
+        self.assertEqual(source_metadata["trim_end_ms"], 2_000)
+        session = GameSession(song, max_players=1)
+        self.assertEqual(
+            session.update(0, {99: named_pose("ready")}),
+            [],
         )
 
     def test_extractor_selects_dancers_and_records_depth_order(self):

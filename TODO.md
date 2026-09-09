@@ -145,9 +145,9 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 
 - [x] Import optional LRC lyrics and optionally copy the original video into a
   song package.
-- [ ] Add extractor flags to trim independently from the beginning and end while
+- [x] Add extractor flags to trim independently from the beginning and end while
   keeping choreography, media timing, lyrics, and duration aligned.
-- [ ] Add a song option to hide an opening portion of video behind a fun intro
+- [x] Add a song option to hide an opening portion of video behind a fun intro
   visualization, retain its audio, and exclude that hidden portion from pose
   capture/scoring.
 - [x] Add a standalone extracted-song player for audio, poses, and optional

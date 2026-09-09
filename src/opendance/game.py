@@ -80,6 +80,21 @@ def load_catalog(path: str | Path | None = None) -> list[dict]:
             song.get("bpm") is not None and float(song["bpm"]) <= 0
         ):
             raise ValueError(f"song {song.get('id', '<unknown>')} has invalid timing")
+        try:
+            media_start = float(song.get("media_start", 0.0))
+            hidden_until = float(song.get("video_hidden_until", 0.0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"song {song['id']} has invalid media timing") from exc
+        if any(
+            isinstance(song.get(field), bool) or not math.isfinite(value) or value < 0
+            for field, value in (
+                ("media_start", media_start),
+                ("video_hidden_until", hidden_until),
+            )
+        ):
+            raise ValueError(f"song {song['id']} has invalid media timing")
+        if hidden_until >= float(song["duration"]):
+            raise ValueError(f"song {song['id']} hides video for its entire duration")
         moves = song.get("moves", [])
         timeline = song.get("choreography", {}).get("timeline", [])
         if not moves and not timeline:

@@ -25,6 +25,11 @@ ApplicationWindow {
     readonly property var song: backend.selectedSong || ({})
     readonly property var playerList: backend.players || []
     readonly property real videoScale: clamped(itemValue(song, "video_scale", 1.0), 0.5, 1.0)
+    readonly property bool videoIntroActive: gameplayScreen
+                                              && backend.coachMode === "video"
+                                              && Number(backend.videoHiddenUntil || 0) > 0
+                                              && (screenName === "countdown"
+                                                  || backend.songTime < backend.videoHiddenUntil)
     readonly property bool selectedSongLocked: itemValue(song, "locked", false)
                                                 || itemValue(song, "unlocked", true) === false
 
@@ -268,6 +273,7 @@ ApplicationWindow {
         width: parent.width * window.videoScale
         height: parent.height * window.videoScale
         visible: window.gameplayScreen && backend.coachMode === "video"
+                 && !window.videoIntroActive
         fillMode: backend.presentationMode ? VideoOutput.PreserveAspectFit
                                            : VideoOutput.PreserveAspectCrop
         opacity: visible ? 1 : 0
@@ -278,7 +284,7 @@ ApplicationWindow {
     Rectangle {
         anchors.fill: parent
         visible: window.gameplayScreen
-        color: backend.coachMode === "video" ? "#35070a12" : "transparent"
+        color: coachVideo.visible ? "#35070a12" : "transparent"
     }
 
     Item {
@@ -318,13 +324,85 @@ ApplicationWindow {
 
     }
 
+    Item {
+        id: introVisual
+        anchors.fill: parent
+        visible: window.screenName === "play" && window.videoIntroActive
+
+        Item {
+            anchors.centerIn: parent
+            width: Math.min(parent.width, parent.height) * 0.62
+            height: width
+
+            Repeater {
+                model: 3
+
+                Rectangle {
+                    required property int index
+                    anchors.centerIn: parent
+                    width: parent.width - index * 58 * window.uiScale
+                    height: width
+                    radius: width / 2
+                    color: index === 2 ? "#1855f7ff" : "transparent"
+                    border.width: 3
+                    border.color: index % 2 ? "#ff4fcb" : "#55f7ff"
+                    opacity: 0.22 + index * 0.13
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        y: -height / 2
+                        width: 28 * window.uiScale
+                        height: 7 * window.uiScale
+                        radius: height / 2
+                        color: parent.border.color
+                    }
+
+                    RotationAnimator on rotation {
+                        running: introVisual.visible && !window.reducedMotion
+                        from: index % 2 ? 0 : 360
+                        to: index % 2 ? 360 : 0
+                        duration: 2800 + index * 700
+                        loops: Animation.Infinite
+                    }
+                }
+            }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 8 * window.uiScale
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "GET READY"
+                    color: "#ffffff"
+                    font.pixelSize: 42 * window.uiScale
+                    font.weight: Font.Black
+                    font.letterSpacing: 3
+                    style: Text.Outline
+                    styleColor: "#88000000"
+                }
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: Math.max(1, Math.ceil(Number(backend.videoHiddenUntil)
+                                                - Number(backend.songTime)))
+                          + "  •  FIND YOUR SPACE"
+                    color: "#ffe66d"
+                    font.pixelSize: 13 * window.uiScale
+                    font.weight: Font.Black
+                    font.letterSpacing: 1.5
+                }
+            }
+        }
+    }
+
     SkeletonView {
         x: coachVideo.x + coachVideo.contentRect.x
         y: coachVideo.y + coachVideo.contentRect.y
         width: coachVideo.contentRect.width
         height: coachVideo.contentRect.height
         visible: window.gameplayScreen && backend.presentationMode
-                 && backend.coachMode === "video"
+                 && backend.coachMode === "video" && !window.videoIntroActive
         people: visible ? backend.targetDancers : null
         lineColor: "#55f7ff"
         mirror: false

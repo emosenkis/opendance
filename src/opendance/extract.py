@@ -98,6 +98,35 @@ def _read_lrc(path: Path | None) -> tuple[list[dict[str, Any]], dict[str, str]]:
         raise ValueError(f"could not read LRC file {path}: {exc}") from exc
 
 
+def _seconds(value: Any, name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be a finite non-negative number")
+    try:
+        result = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite non-negative number") from exc
+    if not math.isfinite(result) or result < 0:
+        raise ValueError(f"{name} must be a finite non-negative number")
+    return result
+
+
+def _retime_lyrics(
+    lyrics: Sequence[dict[str, Any]], start: float, duration: float
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    previous: dict[str, Any] | None = None
+    end = start + duration
+    for lyric in lyrics:
+        when = float(lyric["time"])
+        if when < start:
+            previous = lyric
+        elif when < end:
+            result.append(dict(lyric, time=when - start))
+    if previous is not None and (not result or result[0]["time"] > 0):
+        result.insert(0, dict(previous, time=0.0))
+    return result
+
+
 def _video_timestamp(
     capture: Any,
     cv2: Any,
@@ -724,11 +753,15 @@ def analyze_video(
     video: str | os.PathLike[str],
     engine: PoseEngine,
     *,
+    skip_before_s: float = 0.0,
+    trim_end_s: float = 0.0,
     show_progress: bool = True,
 ) -> dict[str, Any]:
     """Run ``engine`` on every decoded frame and retain the video's timestamps."""
 
     video_path = Path(video)
+    skip_before_ms = _seconds(skip_before_s, "skip-before time") * 1_000.0
+    trim_end_ms = _seconds(trim_end_s, "end trim") * 1_000.0
     if not video_path.is_file():
         raise ValueError(f"video file does not exist: {video_path}")
     try:
@@ -749,10 +782,19 @@ def analyze_video(
     reported_frames = (
         int(raw_count) if math.isfinite(raw_count) and raw_count > 0 else None
     )
+    stop_before_ms = (
+        reported_frames * 1_000.0 / fps - trim_end_ms
+        if reported_frames and fps and trim_end_ms
+        else None
+    )
+    if stop_before_ms is not None and stop_before_ms <= skip_before_ms:
+        capture.release()
+        raise ValueError("requested trim and hidden intro leave no choreography frames")
     timeline: list[dict[str, Any]] = []
-    track_stats: dict[int, dict[str, float]] = {}
     previous_ms: float | None = None
+    last_timestamp_ms: float | None = None
     previous_thumbnail: Any | None = None
+    decoded_frames = 0
     source_size = {"width": 0, "height": 0}
     started = time.perf_counter()
     last_progress = started
@@ -762,11 +804,17 @@ def analyze_video(
             ok, frame = capture.read()
             if not ok:
                 break
-            frame_index = len(timeline)
+            source_frame_index = decoded_frames
+            decoded_frames += 1
             timestamp_ms = _video_timestamp(
-                capture, cv2, frame_index, fps, previous_ms
+                capture, cv2, source_frame_index, fps, previous_ms
             )
             previous_ms = timestamp_ms
+            last_timestamp_ms = timestamp_ms
+            if stop_before_ms is not None and timestamp_ms >= stop_before_ms:
+                break
+            if timestamp_ms < skip_before_ms:
+                continue
             thumbnail = cv2.resize(frame, (32, 18), interpolation=cv2.INTER_AREA)
             scene_delta = (
                 float(cv2.absdiff(thumbnail, previous_thumbnail).mean()) / 255.0
@@ -781,10 +829,9 @@ def analyze_video(
             event = engine.process(frame, timestamp_ms=timestamp_ms)
             source_size = event["source"]
             people = event["people"]
-            _record_tracks(track_stats, people)
             timeline.append(
                 {
-                    "frame": frame_index,
+                    "frame": source_frame_index,
                     "timestamp_ms": timestamp_ms,
                     # ponytail: thumbnail delta is intentionally cheap; add
                     # optical-flow/manual cut markers only if real imports show
@@ -801,7 +848,7 @@ def analyze_video(
                 elapsed = max(now - started, 1e-9)
                 progress = f"{len(timeline)} frames ({len(timeline) / elapsed:.1f} fps)"
                 if reported_frames:
-                    progress += f" / {reported_frames} ({len(timeline) / reported_frames:.1%})"
+                    progress += f" / {reported_frames} ({decoded_frames / reported_frames:.1%})"
                 print(
                     progress,
                     file=sys.stderr,
@@ -814,18 +861,26 @@ def analyze_video(
 
     if show_progress and sys.stderr.isatty():
         print(file=sys.stderr)
-    if not timeline:
+    if not decoded_frames:
         raise RuntimeError(f"video contains no decodable frames: {video_path}")
-    if reported_frames and len(timeline) + 1 < reported_frames:
+    if not timeline:
+        raise RuntimeError(
+            f"video contains no frames at or after {skip_before_ms / 1_000.0:g} seconds"
+        )
+    if not trim_end_ms and reported_frames and decoded_frames + 1 < reported_frames:
         print(
-            f"warning: decoder returned {len(timeline)} of {reported_frames} reported frames",
+            f"warning: decoder returned {decoded_frames} of {reported_frames} reported frames",
             file=sys.stderr,
         )
 
     frame_duration_ms = 1000.0 / fps if fps else 0.0
-    duration_ms = timeline[-1]["timestamp_ms"] + frame_duration_ms
+    assert last_timestamp_ms is not None
+    duration_ms = last_timestamp_ms + frame_duration_ms
     if reported_frames and fps:
         duration_ms = max(duration_ms, reported_frames * 1000.0 / fps)
+    track_stats: dict[int, dict[str, float]] = {}
+    for frame in timeline:
+        _record_tracks(track_stats, frame["people"])
     elapsed = time.perf_counter() - started
     return {
         "source": {
@@ -833,7 +888,8 @@ def analyze_video(
             **source_size,
             "fps": fps or None,
             "reported_frame_count": reported_frames,
-            "decoded_frame_count": len(timeline),
+            "decoded_frame_count": decoded_frames,
+            "analyzed_frame_count": len(timeline),
             "duration_ms": duration_ms,
         },
         "lead_track_id": _choose_lead(track_stats),
@@ -895,6 +951,9 @@ def extract_song(
     dancer_count: int | None = None,
     dancer_track_ids: Sequence[int] | None = None,
     copy_video: bool = False,
+    trim_start: float = 0.0,
+    trim_end: float = 0.0,
+    hide_video_intro: float = 0.0,
     force: bool = False,
     show_progress: bool = True,
 ) -> Path:
@@ -930,6 +989,9 @@ def extract_song(
         raise ValueError(
             f"dancer count {requested_count} exceeds detector --max-people {engine.max_people}"
         )
+    trim_start = _seconds(trim_start, "trim start")
+    trim_end = _seconds(trim_end, "trim end")
+    hide_video_intro = _seconds(hide_video_intro, "hidden video intro")
 
     destination = Path(output_dir)
     if destination.exists() and not destination.is_dir():
@@ -950,14 +1012,52 @@ def extract_song(
                 f"copied video already exists (use --force): {copied_video}"
             )
 
-    analysis = analyze_video(video_path, engine, show_progress=show_progress)
-    if not any(frame["people"] for frame in analysis["frames"]):
+    analysis = analyze_video(
+        video_path,
+        engine,
+        skip_before_s=trim_start + hide_video_intro,
+        trim_end_s=trim_end,
+        show_progress=show_progress,
+    )
+    source_duration = float(analysis["source"]["duration_ms"]) / 1_000.0
+    duration = source_duration - trim_start - trim_end
+    if duration <= 0:
+        raise ValueError("trim start and end remove the entire video")
+    if hide_video_intro >= duration:
+        raise ValueError("hidden video intro must end before the trimmed video")
+    source_end = source_duration - trim_end
+    frames = []
+    for source_frame in analysis["frames"]:
+        timestamp = float(source_frame["timestamp_ms"]) / 1_000.0
+        if timestamp >= source_end:
+            continue
+        frame = dict(source_frame)
+        frame["frame"] = len(frames)
+        frame["timestamp_ms"] = (timestamp - trim_start) * 1_000.0
+        frames.append(frame)
+    if not frames:
+        raise RuntimeError("trimmed video contains no frames available for choreography")
+    analysis["frames"] = frames
+    source = dict(analysis["source"])
+    source.update(
+        {
+            "original_duration_ms": source["duration_ms"],
+            "duration_ms": duration * 1_000.0,
+            "trim_start_ms": trim_start * 1_000.0,
+            "trim_end_ms": trim_end * 1_000.0,
+            "pose_start_ms": hide_video_intro * 1_000.0,
+            "analyzed_frame_count": len(frames),
+        }
+    )
+    analysis["source"] = source
+    track_stats: dict[int, dict[str, float]] = {}
+    for frame in frames:
+        _record_tracks(track_stats, frame["people"])
+    analysis["_track_stats"] = track_stats
+    analysis["track_ids"] = sorted(track_stats)
+    analysis["lead_track_id"] = _choose_lead(track_stats)
+    if not any(frame["people"] for frame in frames):
         raise RuntimeError("no people were detected in the video")
-    track_stats = analysis.get("_track_stats")
-    if not isinstance(track_stats, dict):
-        track_stats = {}
-        for frame in analysis["frames"]:
-            _record_tracks(track_stats, frame["people"])
     selected_count, seed_track_ids = _validate_dancer_request(
         track_stats, dancer_count, dancer_track_ids
     )
@@ -978,13 +1078,15 @@ def extract_song(
         "id": resolved_id,
         "title": resolved_title,
         "artist": resolved_artist,
-        "duration": analysis["source"]["duration_ms"] / 1000.0,
+        "duration": duration,
         "bpm": None,
         "key": "",
         "unlock_cost": 0,
         "palette": [],
         "video": video_reference,
-        "lyrics": lyrics,
+        "media_start": trim_start,
+        "video_hidden_until": hide_video_intro,
+        "lyrics": _retime_lyrics(lyrics, trim_start, duration),
         "moves": [],
         "choreography": {
             "schema_version": 1,
@@ -1037,6 +1139,13 @@ def _nonnegative_int(value: str) -> int:
     if number < 0:
         raise argparse.ArgumentTypeError("must be non-negative")
     return number
+
+
+def _nonnegative_float(value: str) -> float:
+    try:
+        return _seconds(value, "value")
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a finite non-negative number") from exc
 
 
 def _device(value: str) -> str | int:
@@ -1120,6 +1229,27 @@ def _parser() -> argparse.ArgumentParser:
         help="specific detected dancer track to retain; repeat for more than one",
     )
     parser.add_argument("--copy-video", action="store_true")
+    parser.add_argument(
+        "--trim-start",
+        type=_nonnegative_float,
+        default=0.0,
+        metavar="SECONDS",
+        help="omit this much media and choreography from the beginning",
+    )
+    parser.add_argument(
+        "--trim-end",
+        type=_nonnegative_float,
+        default=0.0,
+        metavar="SECONDS",
+        help="omit this much media and choreography from the end",
+    )
+    parser.add_argument(
+        "--hide-video-intro",
+        type=_nonnegative_float,
+        default=0.0,
+        metavar="SECONDS",
+        help="keep intro audio but hide video and skip pose extraction",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     return parser
@@ -1157,6 +1287,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             dancer_count=args.dancers,
             dancer_track_ids=args.track_id,
             copy_video=args.copy_video,
+            trim_start=args.trim_start,
+            trim_end=args.trim_end,
+            hide_video_intro=args.hide_video_intro,
             force=args.force,
             show_progress=not args.no_progress,
         )

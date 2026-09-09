@@ -172,10 +172,16 @@ Useful options:
 uv run opendance-extract --help
 uv run opendance-extract dance.mp4 songs/my-song --device 0 --imgsz 640 \
   --dancers 2 --track-id 7 --track-id 12 --smooth-frames 3 --force
+uv run opendance-extract dance.mp4 songs/my-song --copy-video \
+  --trim-start 2.5 --trim-end 1 --hide-video-intro 4
 ```
 
 Use `--pose-backend rtmpose --rtmpose-mode lightweight` after syncing the
 `rtmpose` extra to extract through the alternate implementation.
+Trim values are seconds. `--hide-video-intro` is measured after the start trim;
+its audio still plays behind a get-ready visualization, while those frames are
+excluded from choreography and scoring. Trimming is lossless: copied media stays
+byte-identical and the package records playback offsets instead of transcoding.
 
 An imported package may reference a coach `video`, separate `audio`, LRC-derived
 `lyrics`, named `moves`, or a dense `choreography.timeline`. Relative media paths

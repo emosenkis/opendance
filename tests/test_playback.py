@@ -8,6 +8,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from PySide6.QtMultimedia import QMediaPlayer
+
 from opendance.app import (
     Backend,
     MAX_PLAYERS,
@@ -67,6 +69,36 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertEqual(_interpolated_media_time(0, None, 12, True), 0)
         self.assertEqual(_interpolated_media_time(2.5, 10, 10.2, False), 2.5)
         self.assertAlmostEqual(_interpolated_media_time(2.5, 10, 10.2, True), 2.7)
+
+    def test_trimmed_media_seeks_and_reports_song_relative_time(self):
+        coach = SimpleNamespace(setPosition=Mock(), play=Mock())
+        music = SimpleNamespace(setPosition=Mock(), play=Mock())
+        backend = Backend.__new__(Backend)
+        backend._coach_player = coach
+        backend._music_player = music
+        backend._clock_player = coach
+        backend._media_start_s = 2.5
+        backend._media_position_s = 0.0
+        backend._media_position_at = None
+        backend._screen = "game"
+
+        backend._start_song_media()
+        with patch("opendance.app.time.monotonic", return_value=10.0):
+            backend._sync_media_position(coach, 4_000)
+
+        coach.setPosition.assert_called_once_with(2_500)
+        music.setPosition.assert_called_once_with(2_500)
+        coach.play.assert_called_once_with()
+        music.play.assert_called_once_with()
+        self.assertEqual(backend._media_position_s, 1.5)
+        self.assertEqual(backend._media_position_at, 10.0)
+
+        coach.setPosition.reset_mock()
+        backend._coach_seek_pending = True
+        backend._song_time = 0.0
+        backend._coach_status(QMediaPlayer.MediaStatus.LoadedMedia)
+        coach.setPosition.assert_called_once_with(2_500)
+        self.assertFalse(backend._coach_seek_pending)
 
     def test_failed_video_falls_back_to_monotonic_choreography_clock(self):
         with TemporaryDirectory() as directory:
