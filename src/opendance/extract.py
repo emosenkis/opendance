@@ -12,11 +12,20 @@ import sys
 import tempfile
 import time
 import unicodedata
+from bisect import bisect_right
 from itertools import combinations, permutations
 from pathlib import Path
+from statistics import median
 from typing import Any, Sequence
 
-from .game import assign_dancers, pose_similarity
+from .game import (
+    _coerce_pose,
+    _normalized,
+    _pose_anchor_scale,
+    assign_dancers,
+    interpolate_pose,
+    pose_similarity,
+)
 from .vision import COCO17_KEYPOINTS, PoseEngine, TemporalPoseFilter, create_pose_engine
 
 
@@ -26,6 +35,11 @@ _WORD_TIME_TAG = re.compile(r"<\d{1,3}:\d{2}(?:\.\d{1,3})?>")
 _SONG_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _SCENE_CUT_DELTA = 0.12
 _ROLE_DISCONTINUITY = 0.72
+_MOVE_PHASES = 12
+_MOVE_MIN_SECONDS = 0.75
+_MOVE_MAX_SECONDS = 3.0
+_MOVE_CONFIDENCE = 0.20
+_MOVE_BODY_JOINTS = range(5, len(COCO17_KEYPOINTS))
 
 
 def _parse_lrc_text(text: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -422,6 +436,290 @@ def _role_timeline(
     return result, dancers, lead_role
 
 
+def _scoring_frames(
+    timeline: Sequence[dict[str, Any]], dancer_count: int
+) -> list[dict[str, Any]]:
+    raw: list[dict[str, Any]] = []
+    pending_cut = False
+    for frame in timeline:
+        pending_cut = pending_cut or bool(frame.get("scene_cut"))
+        try:
+            time_s = float(frame["timestamp_ms"]) / 1_000.0
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(time_s) or (raw and time_s <= raw[-1]["time"]):
+            continue
+        poses = {}
+        for person in frame.get("people", ()):
+            try:
+                dancer_index = int(person["dancer_index"])
+                pose = _coerce_pose(person["keypoints"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if (
+                _pose_anchor_scale(pose, _MOVE_CONFIDENCE)[2] > 1e-9
+                and 0 <= dancer_index < dancer_count
+            ):
+                poses[dancer_index] = pose
+        if poses:
+            raw.append({"time": time_s, "poses": poses, "scene_cut": pending_cut})
+            pending_cut = False
+
+    if len(raw) < 2:
+        return raw
+    sampled = [raw[0]]
+    for frame in raw[1:-1]:
+        if frame["scene_cut"] or frame["time"] - sampled[-1]["time"] >= 1 / 15:
+            sampled.append(frame)
+    if raw[-1]["time"] > sampled[-1]["time"]:
+        sampled.append(raw[-1])
+    return sampled
+
+
+def _motion_delta(first: Sequence, second: Sequence) -> list[float | None]:
+    first_root = _pose_anchor_scale(first, _MOVE_CONFIDENCE)
+    second_root = _pose_anchor_scale(second, _MOVE_CONFIDENCE)
+    first_pose = _normalized(first, _MOVE_CONFIDENCE)
+    second_pose = _normalized(second, _MOVE_CONFIDENCE)
+    scale = (first_root[2] + second_root[2]) / 2
+    if first_pose is None or second_pose is None or scale <= 1e-9:
+        return [None] * len(COCO17_KEYPOINTS)
+    root_dx = (second_root[0] - first_root[0]) / scale
+    root_dy = (second_root[1] - first_root[1]) / scale
+    return [
+        math.dist(before[:2], (after[0] + root_dx, after[1] + root_dy))
+        if min(before[2], after[2]) >= _MOVE_CONFIDENCE
+        else None
+        for before, after in zip(first_pose, second_pose)
+    ]
+
+
+def _motion_speed(first: Sequence, second: Sequence, seconds: float) -> float | None:
+    distance = weight = 0.0
+    delta = _motion_delta(first, second)
+    for index in _MOVE_BODY_JOINTS:
+        confidence = min(first[index][2], second[index][2])
+        if delta[index] is None:
+            continue
+        distance += delta[index] * confidence
+        weight += confidence
+    return distance / weight / seconds if weight and seconds > 0 else None
+
+
+def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
+    if len(frames) < 2 or frames[-1]["time"] - frames[0]["time"] < _MOVE_MIN_SECONDS:
+        return []
+
+    energy = [0.0]
+    for before, after in zip(frames, frames[1:]):
+        speeds = [
+            speed
+            for dancer_index in before["poses"].keys() & after["poses"].keys()
+            if (
+                speed := _motion_speed(
+                    before["poses"][dancer_index],
+                    after["poses"][dancer_index],
+                    after["time"] - before["time"],
+                )
+            )
+            is not None
+        ]
+        energy.append(0.0 if after["scene_cut"] else median(speeds) if speeds else 0.0)
+
+    scores = [0.0] * len(frames)
+    for index in range(1, len(frames) - 1):
+        before, after = energy[index], energy[index + 1]
+        local = median(energy[max(1, index - 2) : min(len(energy), index + 3)])
+        scores[index] = (
+            abs(after - before)
+            + max(0.0, local - min(before, after))
+            + 0.1 * max(0.0, before - after)
+        )
+    typical = median(scores[1:-1]) if len(scores) > 2 else 0.0
+    deviation = median(abs(score - typical) for score in scores[1:-1]) if len(scores) > 2 else 0.0
+    threshold = max(0.08, typical + 2.0 * deviation)
+
+    boundaries = {0, len(frames) - 1}
+
+    def can_add(index: int) -> bool:
+        ordered = sorted(boundaries)
+        position = bisect_right(ordered, index)
+        left = ordered[position - 1]
+        right = ordered[position]
+        return (
+            frames[index]["time"] - frames[left]["time"] >= _MOVE_MIN_SECONDS
+            and frames[right]["time"] - frames[index]["time"] >= _MOVE_MIN_SECONDS
+        )
+
+    for index in range(1, len(frames) - 1):
+        if frames[index]["scene_cut"] and can_add(index):
+            boundaries.add(index)
+
+    candidates = [
+        index
+        for index in range(1, len(frames) - 1)
+        if scores[index] >= threshold
+        and scores[index] >= scores[index - 1]
+        and scores[index] >= scores[index + 1]
+    ]
+    for index in sorted(candidates, key=lambda item: (-scores[item], item)):
+        if can_add(index):
+            boundaries.add(index)
+
+    while True:
+        oversized = next(
+            (
+                (left, right)
+                for left, right in zip(sorted(boundaries), sorted(boundaries)[1:])
+                if frames[right]["time"] - frames[left]["time"] > _MOVE_MAX_SECONDS
+            ),
+            None,
+        )
+        if oversized is None:
+            break
+        left, right = oversized
+        pieces = math.ceil(
+            (frames[right]["time"] - frames[left]["time"]) / _MOVE_MAX_SECONDS
+        )
+        target = frames[left]["time"] + (
+            frames[right]["time"] - frames[left]["time"]
+        ) / pieces
+        feasible = [
+            index
+            for index in range(left + 1, right)
+            if frames[index]["time"] - frames[left]["time"] >= _MOVE_MIN_SECONDS
+            and frames[right]["time"] - frames[index]["time"] >= _MOVE_MIN_SECONDS
+        ]
+        if not feasible:
+            break
+        near = [
+            index
+            for index in feasible
+            if abs(frames[index]["time"] - target) <= _MOVE_MIN_SECONDS / 2
+        ]
+        choice = max(
+            near or feasible,
+            key=lambda index: (
+                scores[index],
+                -abs(frames[index]["time"] - target),
+                -index,
+            ),
+        )
+        boundaries.add(choice)
+
+    ordered = sorted(boundaries)
+    return list(zip(ordered, ordered[1:]))
+
+
+def _pose_at(samples: Sequence[tuple[float, Sequence]], time_s: float):
+    times = [sample[0] for sample in samples]
+    right = bisect_right(times, time_s)
+    if right == 0:
+        return samples[0][1] if times[0] - time_s <= 0.25 else None
+    if right == len(samples):
+        return samples[-1][1] if time_s - times[-1] <= 0.25 else None
+    before, after = samples[right - 1], samples[right]
+    if after[0] - before[0] > 0.5:
+        return None
+    amount = (time_s - before[0]) / max(1e-9, after[0] - before[0])
+    return interpolate_pose(before[1], after[1], amount)
+
+
+def _move_definition(
+    samples: Sequence[tuple[float, Sequence]], start: float, end: float
+) -> dict[str, Any] | None:
+    poses = []
+    for phase in range(_MOVE_PHASES):
+        pose = _pose_at(
+            samples, start + (end - start) * phase / (_MOVE_PHASES - 1)
+        )
+        if pose is None:
+            return None
+        poses.append(pose)
+
+    motion = [0.0] * len(COCO17_KEYPOINTS)
+    for first, second in zip(poses, poses[1:]):
+        delta = _motion_delta(first, second)
+        for index in _MOVE_BODY_JOINTS:
+            confidence = min(first[index][2], second[index][2])
+            if delta[index] is not None:
+                motion[index] += delta[index] * confidence
+    peak = max(motion, default=0.0)
+    weights = [round(value / peak, 4) if peak > 1e-9 else 0.0 for value in motion]
+    important = [
+        index
+        for index in sorted(_MOVE_BODY_JOINTS, key=lambda item: (-motion[item], item))[:3]
+        if motion[index] >= max(0.01, peak * 0.2)
+    ]
+    cue_delta = [_motion_delta(poses[0], pose) for pose in poses]
+    cue_sample = (
+        max(
+            range(_MOVE_PHASES),
+            key=lambda phase: sum(
+                (cue_delta[phase][index] or 0.0)
+                for index in important or _MOVE_BODY_JOINTS
+            ),
+        )
+        if peak > 1e-9
+        else _MOVE_PHASES // 2
+    )
+    return {
+        "poses": [
+            [
+                [round(x, 4), round(y, 4), round(confidence, 3)]
+                for x, y, confidence in pose
+            ]
+            for pose in poses
+        ],
+        "weights": weights,
+        "cue_sample": cue_sample,
+        "important_joints": important,
+    }
+
+
+def _build_move_scoring(
+    timeline: Sequence[dict[str, Any]], dancer_count: int
+) -> dict[str, Any]:
+    artifact: dict[str, Any] = {
+        "schema_version": 1,
+        "feature": "coco17-motion-v1",
+        "pose_coordinate_space": "normalized_image",
+        "phase_count": _MOVE_PHASES,
+        "definitions": {},
+        "segments": [],
+    }
+    frames = _scoring_frames(timeline, dancer_count)
+    lanes = {
+        dancer_index: [
+            (frame["time"], frame["poses"][dancer_index])
+            for frame in frames
+            if dancer_index in frame["poses"]
+        ]
+        for dancer_index in range(dancer_count)
+    }
+    for start_index, end_index in _move_boundaries(frames):
+        start, end = frames[start_index]["time"], frames[end_index]["time"]
+        dancers = []
+        for dancer_index, samples in lanes.items():
+            definition = _move_definition(samples, start, end) if samples else None
+            if definition is None:
+                continue
+            definition_id = f"m{len(artifact['definitions']):04d}"
+            artifact["definitions"][definition_id] = definition
+            dancers.append(
+                {
+                    "dancer_index": dancer_index,
+                    "definition": definition_id,
+                    "mirrored": False,
+                }
+            )
+        if dancers:
+            artifact["segments"].append(
+                {"start": round(start, 3), "end": round(end, 3), "dancers": dancers}
+            )
+    return artifact
+
+
 def analyze_video(
     video: str | os.PathLike[str],
     engine: PoseEngine,
@@ -713,6 +1011,7 @@ def extract_song(
             "track_ids": analysis["track_ids"],
             "source": analysis["source"],
             "timeline": selected_timeline,
+            "move_scoring": _build_move_scoring(selected_timeline, selected_count),
         },
         "extraction": analysis["processing"],
     }

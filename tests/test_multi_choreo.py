@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from opendance.extract import extract_song
+from opendance.extract import _build_move_scoring, extract_song
 from opendance.game import (
     GameSession,
     assign_dancers,
@@ -29,7 +29,97 @@ def person(track_id, name, dx, bbox):
     }
 
 
+def transformed(name, dx, scale):
+    return [
+        [0.5 + dx + (x - 0.5) * scale, 0.5 + (y - 0.5) * scale, confidence]
+        for x, y, confidence in named_pose(name)
+    ]
+
+
 class MultiDancerTest(unittest.TestCase):
+    def test_move_scoring_segments_normalized_multi_dancer_motion(self):
+        timeline = []
+        for frame_index in range(12):
+            time_s = frame_index * 0.25
+            pose = "ready" if time_s < 1.5 else "star"
+            timeline.append(
+                {
+                    "timestamp_ms": time_s * 1000,
+                    "people": [
+                        {
+                            "dancer_index": 0,
+                            "keypoints": transformed(pose, -0.2, 0.8),
+                        },
+                        {
+                            "dancer_index": 1,
+                            "keypoints": transformed(pose, 0.2, 1.3),
+                        },
+                    ],
+                }
+            )
+
+        artifact = _build_move_scoring(timeline, 2)
+        self.assertEqual(artifact, _build_move_scoring(timeline, 2))
+        self.assertEqual(artifact["schema_version"], 1)
+        self.assertEqual(artifact["phase_count"], 12)
+        self.assertEqual(
+            [(segment["start"], segment["end"]) for segment in artifact["segments"]],
+            [(0.0, 1.5), (1.5, 2.75)],
+        )
+        self.assertTrue(
+            all(len(segment["dancers"]) == 2 for segment in artifact["segments"])
+        )
+        self.assertEqual(len(artifact["definitions"]), 4)
+        first, second = artifact["definitions"]["m0000"], artifact["definitions"]["m0001"]
+        self.assertNotEqual(first["poses"], second["poses"])
+        for definition in artifact["definitions"].values():
+            self.assertEqual(len(definition["poses"]), 12)
+            self.assertEqual(len(definition["weights"]), 17)
+            self.assertLess(definition["cue_sample"], 12)
+            self.assertLessEqual(len(definition["important_joints"]), 3)
+
+    def test_move_scoring_preserves_root_travel_in_definition(self):
+        timeline = []
+        for frame_index in range(5):
+            time_s = frame_index * 0.25
+            timeline.append(
+                {
+                    "timestamp_ms": time_s * 1000,
+                    "people": [
+                        {
+                            "dancer_index": 0,
+                            "keypoints": transformed(
+                                "ready", -0.15 + 0.15 * time_s, 0.8
+                            ),
+                        }
+                    ],
+                }
+            )
+
+        definition = _build_move_scoring(timeline, 1)["definitions"]["m0000"]
+        first, last = definition["poses"][0], definition["poses"][-1]
+        first_root = (first[11][0] + first[12][0]) / 2
+        last_root = (last[11][0] + last[12][0]) / 2
+        self.assertAlmostEqual(last_root - first_root, 0.15, places=3)
+
+    def test_move_scoring_is_empty_for_an_insufficient_timeline(self):
+        artifact = _build_move_scoring(
+            [
+                {
+                    "timestamp_ms": 0,
+                    "people": [
+                        {
+                            "dancer_index": 0,
+                            "keypoints": transformed("ready", 0, 1),
+                        }
+                    ],
+                }
+            ],
+            1,
+        )
+        self.assertEqual(artifact["definitions"], {})
+        self.assertEqual(artifact["segments"], [])
+
     def test_balanced_position_assignment(self):
         dancers = [0.2, 0.8]
         self.assertEqual(assign_dancers({7: 0.75}, dancers), {7: 1})
@@ -188,6 +278,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertTrue(choreography["timeline"][3]["scene_cut"])
         self.assertIn(33, choreography["dancers"][0]["track_ids"])
         self.assertIn(44, choreography["dancers"][1]["track_ids"])
+        self.assertEqual(choreography["move_scoring"]["schema_version"], 1)
 
 
 if __name__ == "__main__":

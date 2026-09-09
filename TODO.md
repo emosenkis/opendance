@@ -76,6 +76,8 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   score/combo.
 - [x] Extract choreography offline through the same pose implementation used at
   runtime and emit a portable song package.
+- [x] Segment extracted multi-dancer choreography into bounded moves and emit
+  compact phase-sampled motion definitions for runtime scoring and cues.
 - [x] Extract more than one dancer with knobs for count and chosen raw track IDs.
 - [x] Maintain stable authored dancer roles across raw tracking fragmentation.
 - [x] Assign live players to extracted dancers by left/right alignment; cover
