@@ -2,6 +2,9 @@
 
 This is the living checklist for the user's requests. Update it whenever scope or
 completion changes; `[x]` means implemented and checked, not merely planned.
+The full user/assistant transcript from the original Paseo agent was recovered to
+the gitignored `prior-agent-transcript.txt`; newer requests below supersede older
+ones where they conflict.
 
 ## Foundation and targets
 
@@ -20,6 +23,11 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   prevent stale-frame latency.
 - [ ] Verify smooth play on the target 10th-gen Core i7 / RTX 3050 Ti Windows
   10/11 laptop with its real camera and NVIDIA driver.
+- [ ] Investigate a possible VRAM leak after the user saw NVIDIA
+  `NV_ERR_NO_MEMORY` in the middle of a song after roughly five complete songs
+  with 3–5 players. Reproduce and measure memory across repeated song starts,
+  finishes, and retries; do not assume player/dancer count is the cause merely
+  because that was the observed workload.
 
 ## Pose, cameras, and identity
 
@@ -104,20 +112,27 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [x] Provide optional heads-up upcoming-move pose cues.
 - [x] Provide frequent per-player visual judgements, combos, points, audible
   stingers, 0–5 stars, earned currency, song unlocks, and celebratory effects.
-- [ ] Replace frame-by-frame pose-copy scoring with dance-move segmentation and
-  score whether each player performs the authored motion, without depending on
-  their starting location, camera position, or apparent size in the frame.
+- [ ] Replace the extracted-video fallback's periodic single-frame pose-copy
+  scoring with the authored dance-move segments: capture each player's motion
+  across the complete segment, judge once when that move ends, and keep scoring
+  independent of starting location, camera position, and apparent body size.
 - [x] Put scoring and judgement feedback in the active-player row across the
   top; allow each song to shrink/inset its video while defaulting video scale
   to 100%.
 - [ ] Change heads-up cues from a constant N-seconds-ahead live pose to the next
-  discrete segmented dance move.
+  discrete segmented dance move, using that move's authored representative cue
+  pose rather than an arbitrary future video frame.
 - [ ] Experiment with clustering repeated occurrences of a move into one move
   definition and identical scoring/cues; try a distinctive still pose or arrows
   on the one to three most important moving body parts instead of animation.
-- [ ] Color-code each live-player-to-authored-dancer assignment consistently
-  across the score bar, next-move cue, real-time pose mini-view, and an optional
-  highlight below the corresponding dancer in the source video.
+- [ ] Make every live-player-to-authored-dancer assignment unmistakable: use one
+  stable dancer color on that player's score bar, their next-move cue, and their
+  real-time mini-view skeleton, label the player/dancer relationship directly,
+  and optionally place the same-color highlight below the corresponding dancer
+  in source video. Players assigned duplicate choreography share its color.
+- [ ] Remove score/judgement sound effects while a song is being played; retain
+  the song/video audio and visual feedback. This supersedes the earlier request
+  for frequent audible gameplay stingers.
 - [x] Stop judgement feedback from flickering/restarting invisibly.
 - [x] Use compressed Ogg for every tracked music/effect asset and remove WAV
   assets/references from the source tree.

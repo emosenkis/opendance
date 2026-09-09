@@ -11,6 +11,7 @@ dist/
 *.engine
 *.wav
 *.log
+prior-agent-transcript.txt
 extracted/
 /songs/
 /*.avi
