@@ -41,6 +41,11 @@ COCO_KEYPOINTS = (
 )
 
 LEFT_RIGHT_PAIRS = ((1, 2), (3, 4), (5, 6), (7, 8), (9, 10), (11, 12), (13, 14), (15, 16))
+_MOTION_BONES = (
+    (5, 6), (5, 7), (7, 9), (6, 8), (8, 10),
+    (5, 11), (6, 12), (11, 12),
+    (11, 13), (13, 15), (12, 14), (14, 16),
+)
 
 GRADE_THRESHOLDS = (
     ("PERFECT", 0.90, 1_000),
@@ -653,6 +658,148 @@ def pose_similarity(
             for swap in (False, True)
         )
     return max(scores)
+
+
+def _motion_features(poses: Sequence[Sequence], minimum_confidence: float) -> tuple:
+    sequence = tuple(_coerce_pose(pose) for pose in poses)
+    if not sequence:
+        raise ValueError("a move needs at least one pose")
+    origin_x, origin_y, origin_scale = _pose_anchor_scale(sequence[0], minimum_confidence)
+    if origin_scale <= 1e-9:
+        return ()
+
+    features = []
+    for pose in sequence:
+        center_x, center_y, scale = _pose_anchor_scale(pose, minimum_confidence)
+        hips = min(pose[11][2], pose[12][2])
+        shoulders = min(pose[5][2], pose[6][2])
+        root_confidence = hips if hips >= minimum_confidence else shoulders
+        normalized = _normalized(pose, minimum_confidence)
+        bones = []
+        for start, end in _MOTION_BONES:
+            confidence = min(pose[start][2], pose[end][2])
+            if normalized is None or confidence < minimum_confidence:
+                bones.append((0.0, 0.0, 0.0))
+                continue
+            dx = normalized[end][0] - normalized[start][0]
+            dy = normalized[end][1] - normalized[start][1]
+            length = math.hypot(dx, dy)
+            bones.append(
+                (dx / length, dy / length, confidence)
+                if length > 1e-9
+                else (0.0, 0.0, 0.0)
+            )
+        features.append(
+            (
+                (center_x - origin_x) / origin_scale,
+                (center_y - origin_y) / origin_scale,
+                root_confidence if scale > 1e-9 else 0.0,
+                tuple(bones),
+            )
+        )
+    return tuple(features)
+
+
+def _motion_frame_cost(actual: tuple, wanted: tuple, minimum_confidence: float) -> float:
+    bone_error = 0.0
+    bone_weight = 0.0
+    for observed, target in zip(actual[3], wanted[3]):
+        weight = min(observed[2], target[2])
+        if weight < minimum_confidence:
+            continue
+        direction_error = (1.0 - observed[0] * target[0] - observed[1] * target[1]) / 2.0
+        bone_error += max(0.0, min(1.0, direction_error)) * weight
+        bone_weight += weight
+    if bone_weight < 4.0 * minimum_confidence:
+        return 1.0
+    root_weight = 3.0 * min(actual[2], wanted[2])
+    root_error = 1.0 - math.exp(-2.0 * math.dist(actual[:2], wanted[:2]))
+    return (bone_error + root_error * root_weight) / (bone_weight + root_weight)
+
+
+def _motion_activity(features: tuple, minimum_confidence: float) -> float:
+    activity = 0.0
+    for first, second in zip(features, features[1:]):
+        weighted_change = 0.0
+        weight_sum = 0.0
+        root_weight = 3.0 * min(first[2], second[2])
+        weighted_change += math.dist(first[:2], second[:2]) * root_weight
+        weight_sum += root_weight
+        for before, after in zip(first[3], second[3]):
+            weight = min(before[2], after[2])
+            if weight < minimum_confidence:
+                continue
+            weighted_change += math.dist(before[:2], after[:2]) * 0.5 * weight
+            weight_sum += weight
+        if weight_sum:
+            activity += weighted_change / weight_sum
+    return activity
+
+
+def _motion_dtw(actual: tuple, wanted: tuple, minimum_confidence: float) -> float:
+    # ponytail: quadratic within a narrow band; revisit only for long, unsegmented tracks.
+    radius = max(1, math.ceil(0.2 * max(len(actual), len(wanted))))
+    previous: dict[int, tuple[float, int]] = {}
+    for i, observed in enumerate(actual):
+        center = round(i * (len(wanted) - 1) / max(1, len(actual) - 1))
+        current: dict[int, tuple[float, int]] = {}
+        for j in range(max(0, center - radius), min(len(wanted), center + radius + 1)):
+            cost = _motion_frame_cost(observed, wanted[j], minimum_confidence)
+            if i == 0 and j == 0:
+                current[j] = (cost, 1)
+                continue
+            candidates = [
+                entry
+                for entry in (previous.get(j), current.get(j - 1), previous.get(j - 1))
+                if entry
+            ]
+            if candidates:
+                total, steps = min(candidates, key=lambda entry: entry[0])
+                current[j] = (total + cost, steps + 1)
+        previous = current
+    total, steps = previous.get(len(wanted) - 1, (float("inf"), 1))
+    return total / steps
+
+
+def move_similarity(
+    observed: Sequence[Sequence],
+    target: Sequence[Sequence],
+    *,
+    allow_mirror: bool = True,
+    minimum_confidence: float = 0.20,
+) -> float:
+    """Score a complete COCO-17 move, ignoring initial position and body scale.
+
+    A single bounded time warp and, optionally, one mirror convention are chosen
+    for the whole move. Root travel and confidence-weighted bone directions are
+    compared from 0..1; an active target cannot be matched by a stationary pose.
+    """
+
+    actual_poses = tuple(_coerce_pose(pose) for pose in observed)
+    wanted = _motion_features(target, minimum_confidence)
+    if not actual_poses:
+        raise ValueError("a move needs at least one pose")
+    if not wanted:
+        return 0.0
+
+    variants = [actual_poses]
+    if allow_mirror:
+        variants.extend(
+            tuple(_mirror_for_comparison(pose, swap) for pose in actual_poses)
+            for swap in (False, True)
+        )
+    target_activity = _motion_activity(wanted, minimum_confidence)
+    scores = []
+    for poses in variants:
+        actual = _motion_features(poses, minimum_confidence)
+        if not actual:
+            scores.append(0.0)
+            continue
+        score = math.exp(-3.5 * _motion_dtw(actual, wanted, minimum_confidence))
+        if target_activity > 0.05:
+            score *= min(1.0, _motion_activity(actual, minimum_confidence) / (0.5 * target_activity))
+        scores.append(score)
+    return max(0.0, min(1.0, max(scores)))
 
 
 def grade_similarity(similarity: float) -> str:
