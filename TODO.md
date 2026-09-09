@@ -158,7 +158,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
   the build host's glibc floor; use the container for a fixed userspace baseline.
 - [x] Create the public `emosenkis/opendance` GitHub repository and push the
   cleaned single-commit history.
-- [ ] Run and fix public CI to green.
+- [x] Run and fix public CI to green.
 - [ ] Tag `v0.1.0`, let release automation build both platforms, publish only
   after both succeed, and anonymously verify the GHCR image can be pulled.
 
