@@ -782,6 +782,7 @@ class Backend(QObject):
 
     @Slot()
     def refreshCameras(self) -> None:
+        previous_source = self._selected_source
         saved = str(self.settings.value("camera/id", ""))
         devices = list(QMediaDevices.videoInputs())
         self._camera_devices = {bytes(device.id()).hex(): device for device in devices}
@@ -814,6 +815,14 @@ class Backend(QObject):
         if self._selected_source not in valid:
             self._selected_source = camera_rows[0]["id"] if camera_rows else ""
         self.changed.emit()
+        if self._capture_sink and (
+            self._selected_source != previous_source
+            or (
+                self._selected_source in self._camera_devices
+                and self._camera is None
+            )
+        ):
+            self._apply_source()
 
     @Slot(str)
     def selectSource(self, source_id: str) -> None:

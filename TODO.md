@@ -31,7 +31,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [x] Discover and select among multiple cameras, preferring recognized USB
   cameras over an integrated laptop camera by default while remembering an
   explicit choice.
-- [ ] Actually start the visibly selected default/only camera when setup opens;
+- [x] Actually start the visibly selected default/only camera when setup opens;
   do not require clicking the already-selected camera first.
 - [x] Accept a video file through the same decoded-frame pose pipeline as a
   simulated webcam, without requiring a virtual-camera utility.

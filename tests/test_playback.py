@@ -4,8 +4,9 @@ from pathlib import Path
 import runpy
 import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from opendance.app import (
     Backend,
@@ -39,6 +40,28 @@ class PlaybackPolicyTest(unittest.TestCase):
 
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)
+
+    def test_discovered_default_camera_is_activated_without_clicking_it(self):
+        device = SimpleNamespace(
+            id=lambda: b"usb-camera",
+            description=lambda: "USB Camera",
+        )
+        backend = Backend.__new__(Backend)
+        backend.settings = SimpleNamespace(value=lambda *_args, **_kwargs: "")
+        backend._camera_devices = {}
+        backend._cameras = []
+        backend._selected_source = ""
+        backend._alternate_sources_enabled = False
+        backend._capture_sink = object()
+        backend._camera = None
+        backend.changed = SimpleNamespace(emit=Mock())
+        backend._apply_source = Mock()
+
+        with patch("opendance.app.QMediaDevices.videoInputs", return_value=[device]):
+            backend.refreshCameras()
+
+        self.assertEqual(backend._selected_source, b"usb-camera".hex())
+        backend._apply_source.assert_called_once_with()
 
     def test_media_clock_waits_for_playback_then_interpolates(self):
         self.assertEqual(_interpolated_media_time(0, None, 12, True), 0)
