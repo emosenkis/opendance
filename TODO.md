@@ -159,7 +159,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [x] Create the public `emosenkis/opendance` GitHub repository and push the
   cleaned single-commit history.
 - [x] Run and fix public CI to green.
-- [ ] Tag `v0.1.0`, let release automation build both platforms, publish only
+- [x] Tag `v0.1.0`, let release automation build both platforms, publish only
   after both succeed, and anonymously verify the GHCR image can be pulled.
 
 ## Assets and final validation
