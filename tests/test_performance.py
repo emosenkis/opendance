@@ -122,6 +122,7 @@ class PoseDiagnosticsTest(unittest.TestCase):
             create_pose_engine("rtmpose", rtmpose_mode="lightweight"),
             RTMPoseEngine,
         )
+        self.assertEqual(create_pose_engine("rtmpose", max_people=6).max_people, 6)
         with self.assertRaisesRegex(ValueError, "model applies to YOLO26"):
             create_pose_engine("rtmpose", model="wrong.onnx")
 

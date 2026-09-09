@@ -60,8 +60,8 @@ Item {
         context.lineWidth = Math.max(2, Math.min(root.width, root.height) * 0.012 * root.lineScale)
         var colorIndex = person && person.dancer_index !== undefined
                        ? number(person.dancer_index, personIndex) : personIndex
-        context.strokeStyle = [root.lineColor, "#ff4fcb", "#ffe66d", "#7cff9b"][
-                                  Math.abs(Math.floor(colorIndex)) % 4]
+        context.strokeStyle = [root.lineColor, "#ff4fcb", "#ffe66d", "#7cff9b",
+                               "#ff855f", "#b896ff"][Math.abs(Math.floor(colorIndex)) % 6]
 
         for (var i = 0; i < links.length; ++i) {
             var first = point(joints[links[i][0]])

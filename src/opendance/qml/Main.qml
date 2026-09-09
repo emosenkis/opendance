@@ -51,7 +51,7 @@ ApplicationWindow {
     }
 
     function playerColor(index) {
-        return ["#55f7ff", "#ff4fcb", "#ffe66d", "#7cff9b"][index % 4]
+        return ["#55f7ff", "#ff4fcb", "#ffe66d", "#7cff9b", "#ff855f", "#b896ff"][index % 6]
     }
 
     function playerForSlot(index) {
@@ -829,26 +829,30 @@ ApplicationWindow {
                                 spacing: 12 * window.uiScale
 
                                 Repeater {
-                                    model: Number(backend.maxPlayers || 2)
+                                    model: window.playerList
 
                                     Rectangle {
                                         id: setupPlayerChip
                                         required property int index
-                                        readonly property var player: window.playerForSlot(index)
-                                        width: 132 * window.uiScale
+                                        required property var modelData
+                                        readonly property int playerSlot: Number(window.itemValue(modelData, "slot", index))
+                                        width: Math.min(132 * window.uiScale,
+                                                        (setupCameraHost.width - 24 * window.uiScale)
+                                                        / Math.max(1, window.playerList.length)
+                                                        - 8 * window.uiScale)
                                         height: 38 * window.uiScale
                                         radius: 19 * window.uiScale
-                                        color: player ? "#cc132331" : "#bb111420"
+                                        color: "#cc132331"
                                         border.width: 1
-                                        border.color: player ? window.playerColor(index) : "#4e5669"
+                                        border.color: window.playerColor(playerSlot)
 
                                         Label {
                                             anchors.centerIn: parent
-                                            text: setupPlayerChip.player
-                                                  ? "P" + (setupPlayerChip.index + 1) + " READY"
-                                                  : "P" + (setupPlayerChip.index + 1)
-                                                    + (backend.joinGestureOnly ? " HANDS UP" : " STEP IN")
-                                            color: setupPlayerChip.player ? "#ffffff" : "#8e98ab"
+                                            text: "P" + Number(window.itemValue(setupPlayerChip.modelData,
+                                                                                 "player_number",
+                                                                                 setupPlayerChip.playerSlot + 1))
+                                                  + " READY"
+                                            color: "#ffffff"
                                             font.pixelSize: 10 * window.uiScale
                                             font.weight: Font.Bold
                                             font.letterSpacing: 0.8
@@ -1236,22 +1240,24 @@ ApplicationWindow {
                 spacing: 11
 
                     Repeater {
-                        model: Number(backend.maxPlayers || 2)
+                        model: window.playerList
 
                         GlassPanel {
                             id: countdownPlayerChip
                             required property int index
-                            readonly property var player: window.playerForSlot(index)
+                            required property var modelData
+                            readonly property int playerSlot: Number(window.itemValue(modelData, "slot", index))
                             width: 175 * window.uiScale
                             height: 46 * window.uiScale
-                            accent: window.playerColor(index)
+                            accent: window.playerColor(playerSlot)
 
                             Label {
                                 anchors.centerIn: parent
-                                text: countdownPlayerChip.player
-                                      ? "P" + (countdownPlayerChip.index + 1) + " TRACKED"
-                                      : "P" + (countdownPlayerChip.index + 1) + " CAN JOIN ANYTIME"
-                                color: countdownPlayerChip.player ? "#ffffff" : "#929caf"
+                                text: "P" + Number(window.itemValue(countdownPlayerChip.modelData,
+                                                                     "player_number",
+                                                                     countdownPlayerChip.playerSlot + 1))
+                                      + " TRACKED"
+                                color: "#ffffff"
                                 font.pixelSize: 10 * window.uiScale
                                 font.weight: Font.Bold
                             }
@@ -1281,16 +1287,22 @@ ApplicationWindow {
                     spacing: 12 * window.uiScale
 
                     Repeater {
-                        model: backend.presentationMode ? 0 : Number(backend.maxPlayers || 2)
+                        model: backend.presentationMode ? [] : window.playerList
 
                         PlayerHud {
                             required property int index
+                            required property var modelData
+                            readonly property int playerSlot: Number(window.itemValue(modelData, "slot", index))
                             Layout.preferredWidth: Math.min(248 * window.uiScale,
-                                                           (playPage.width - 420 * window.uiScale) / 4)
+                                                           (playPage.width
+                                                            - (songStatusPanel.visible ? 420 : 240)
+                                                            * window.uiScale)
+                                                           / Math.max(1, window.playerList.length))
                             Layout.fillHeight: true
-                            player: window.playerForSlot(index)
-                            playerNumber: index + 1
-                            playerColor: window.playerColor(index)
+                            player: modelData
+                            playerNumber: Number(window.itemValue(modelData, "player_number",
+                                                                   playerSlot + 1))
+                            playerColor: window.playerColor(playerSlot)
                             reducedMotion: window.reducedMotion
                         }
                     }
@@ -1298,7 +1310,9 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true }
 
                     GlassPanel {
-                        Layout.preferredWidth: 165 * window.uiScale
+                        id: songStatusPanel
+                        visible: window.width >= 1100 || window.playerList.length < 5
+                        Layout.preferredWidth: visible ? 165 * window.uiScale : 0
                         Layout.fillHeight: true
                         accent: "#ffe66d"
 
@@ -1328,6 +1342,7 @@ ApplicationWindow {
                     }
 
                     NeonButton {
+                        Layout.preferredWidth: 104 * window.uiScale
                         text: backend.paused ? "RESUME" : "PAUSE"
                         compact: true
                         accent: "#9c7cff"
@@ -1794,22 +1809,19 @@ ApplicationWindow {
                         }
 
                         Repeater {
-                            model: Math.max(1, window.playerList.length)
+                            model: window.playerList
 
                             PlayerHud {
                                 required property int index
+                                required property var modelData
                                 Layout.fillWidth: true
                                 Layout.preferredHeight: Math.min(
                                                             100 * window.uiScale,
                                                             (resultsPage.height - 390 * window.uiScale)
                                                             / Math.max(1, window.playerList.length))
-                                player: index < window.playerList.length ? window.playerList[index] : null
-                                playerNumber: index < window.playerList.length
-                                              ? Number(window.itemValue(window.playerList[index], "player_number", index + 1))
-                                              : index + 1
-                                playerColor: window.playerColor(index < window.playerList.length
-                                                                ? Number(window.itemValue(window.playerList[index], "slot", index))
-                                                                : index)
+                                player: modelData
+                                playerNumber: Number(window.itemValue(modelData, "player_number", index + 1))
+                                playerColor: window.playerColor(Number(window.itemValue(modelData, "slot", index)))
                                 reducedMotion: window.reducedMotion
                             }
                         }

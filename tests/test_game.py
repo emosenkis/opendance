@@ -23,6 +23,9 @@ def shifted(name, dx=0.0):
 
 
 class GameCoreTest(unittest.TestCase):
+    def test_six_player_slots_are_supported(self):
+        self.assertEqual(len(PlayerSlots().slots), 6)
+
     def test_session_does_not_duplicate_dense_choreography(self):
         choreography = {
             "timeline": [

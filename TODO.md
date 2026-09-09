@@ -65,7 +65,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 ## Players and choreography
 
 - [x] Support 1–2 players and the 3–4 player stretch goal.
-- [ ] Increase the runtime cap from four to six players and create HUD/slot UI
+- [x] Increase the runtime cap from four to six players and create HUD/slot UI
   only for dancers who are actually active rather than showing empty players.
 - [x] Detect players dynamically: start with any nonzero player count and allow
   joining, leaving, short-term re-identification, and returning mid-song without
@@ -133,7 +133,7 @@ completion changes; `[x]` means implemented and checked, not merely planned.
 - [ ] Play an interesting short audio/video preview inside the selected song
   card, with an audio fade-in and fade-out.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
-  minimum with 1–4 players and reduced-motion mode.
+  minimum with 1–6 players and reduced-motion mode.
 
 ## Song tooling
 

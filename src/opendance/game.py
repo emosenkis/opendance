@@ -687,7 +687,7 @@ def assign_dancers(
 
     With fewer players, every player gets a distinct dancer. With more players,
     every dancer is covered before duplicates and group sizes differ by at most
-    one. The search is deliberately exhaustive: the game caps both sides at four.
+    one. The search is deliberately exhaustive: the game caps both sides at six.
     """
 
     players = sorted(
@@ -751,18 +751,18 @@ class PlayerSlot:
 
 
 class PlayerSlots:
-    """Bind volatile tracker ids to up to four stable player slots."""
+    """Bind volatile tracker ids to up to six stable player slots."""
 
     def __init__(
         self,
-        max_players: int = 4,
+        max_players: int = 6,
         *,
         leave_after: float = 0.75,
         rebind_seconds: float = 4.0,
         rebind_distance: float = 0.40,
     ) -> None:
-        if not 1 <= max_players <= 4:
-            raise ValueError("max_players must be between 1 and 4")
+        if not 1 <= max_players <= 6:
+            raise ValueError("max_players must be between 1 and 6")
         self.leave_after = float(leave_after)
         self.rebind_seconds = float(rebind_seconds)
         self.rebind_distance = float(rebind_distance)
@@ -917,7 +917,7 @@ class GameSession:
     def __init__(
         self,
         song: Mapping,
-        max_players: int = 4,
+        max_players: int = 6,
         *,
         mirror_player_positions: bool = True,
     ) -> None:

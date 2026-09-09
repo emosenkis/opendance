@@ -37,8 +37,8 @@ class PlaybackPolicyTest(unittest.TestCase):
             video.unlink()
             self.assertIsNone(song_media_path(song, "video"))
 
-    def test_runtime_always_has_four_dynamic_slots(self):
-        self.assertEqual(MAX_PLAYERS, 4)
+    def test_runtime_supports_six_dynamic_slots(self):
+        self.assertEqual(MAX_PLAYERS, 6)
 
     def test_media_clock_waits_for_playback_then_interpolates(self):
         self.assertEqual(_interpolated_media_time(0, None, 12, True), 0)

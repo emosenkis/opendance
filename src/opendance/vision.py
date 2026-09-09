@@ -434,7 +434,7 @@ class PoseEngine:
         *,
         imgsz: int = 640,
         device: str | int | None = None,
-        max_people: int = 4,
+        max_people: int = 6,
         smooth_frames: int = 3,
     ) -> None:
         configured_model = model if model is not None else os.environ.get("OPENDANCE_MODEL")
@@ -690,9 +690,9 @@ class RTMPoseEngine:
         if (
             isinstance(max_people, bool)
             or not isinstance(max_people, int)
-            or not 1 <= max_people <= 4
+            or not 1 <= max_people <= 6
         ):
-            raise ValueError("RTMPose max_people must be between 1 and 4")
+            raise ValueError("RTMPose max_people must be between 1 and 6")
         if isinstance(smooth_frames, bool) or not isinstance(smooth_frames, int) or smooth_frames < 0:
             raise ValueError("smooth_frames must be a non-negative integer")
         self.mode = mode

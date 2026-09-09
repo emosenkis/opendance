@@ -47,7 +47,7 @@ from .game import (
 from .vision import GestureController
 
 
-MAX_PLAYERS = 4
+MAX_PLAYERS = 6
 
 
 def _enabled(value: Any) -> bool:
@@ -161,6 +161,7 @@ class PoseThread(threading.Thread):
             self.engine = create_pose_engine(
                 self.bridge._pose_backend,
                 rtmpose_mode=self.bridge._rtmpose_mode,
+                max_people=self.bridge._max_players,
             )
             self.engine.load()
             self.bridge._vision_status.emit(f"{label} ready")
