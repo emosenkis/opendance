@@ -110,8 +110,8 @@ ones where they conflict.
   mapped through aspect-fit video geometry.
 - [x] Show synchronized lyrics when available.
 - [x] Provide optional heads-up upcoming-move pose cues.
-- [x] Provide frequent per-player visual judgements, combos, points, audible
-  stingers, 0–5 stars, earned currency, song unlocks, and celebratory effects.
+- [x] Provide frequent per-player visual judgements, combos, points, 0–5 stars,
+  earned currency, song unlocks, and celebratory effects.
 - [ ] Replace the extracted-video fallback's periodic single-frame pose-copy
   scoring with the authored dance-move segments: capture each player's motion
   across the complete segment, judge once when that move ends, and keep scoring
@@ -130,7 +130,7 @@ ones where they conflict.
   real-time mini-view skeleton, label the player/dancer relationship directly,
   and optionally place the same-color highlight below the corresponding dancer
   in source video. Players assigned duplicate choreography share its color.
-- [ ] Remove score/judgement sound effects while a song is being played; retain
+- [x] Remove score/judgement sound effects while a song is being played; retain
   the song/video audio and visual feedback. This supersedes the earlier request
   for frequent audible gameplay stingers.
 - [x] Stop judgement feedback from flickering/restarting invisibly.

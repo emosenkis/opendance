@@ -1328,8 +1328,6 @@ class Backend(QObject):
                 item if isinstance(item, dict) else vars(item) for item in new_feedback
             ][-self._max_players :]
             self.feedbackChanged.emit()
-            best = max(new_feedback, key=lambda item: item.points).grade.lower()
-            self._play_stinger("good" if best == "ok" else best)
         players = self._session.ui_players()
         if players != self._players:
             self._players = players
