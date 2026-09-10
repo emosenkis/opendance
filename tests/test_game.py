@@ -176,18 +176,25 @@ class GameCoreTest(unittest.TestCase):
                 "cosmic_afterburn",
                 "solar_sidewalk",
                 "velvet_voltage",
+                "brassline_breakaway",
             ],
         )
         for song in catalog:
             for move in song["moves"]:
                 self.assertEqual(len(named_pose(move["name"])), 17)
-        for song in catalog[-2:]:
+        for song in catalog[-3:]:
+            beat_offset = float(song.get("beat_offset", 0))
             for index, move in enumerate(song["moves"]):
                 self.assertAlmostEqual(
-                    float(move["time"]) * float(song["bpm"]) / 60,
+                    (float(move["time"]) - beat_offset)
+                    * float(song["bpm"])
+                    / 60,
                     index * 4,
                     delta=0.0011,
                 )
+        self.assertEqual(
+            catalog[-1]["audio_provenance"]["model"], "model_meta-musicgen"
+        )
         extracted = {
             "id": "video",
             "title": "Video",

@@ -7,9 +7,10 @@ Inference runs on a latest-frame worker thread in the game process: camera
 frames never cross a process or network boundary, and a slow frame cannot build
 up input lag.
 
-The repository includes five original Ogg-compressed synth tracks, generated choreography,
-lyrics, dynamic join/rejoin, 0–5 star scoring, unlocks, controller navigation,
-video coaching, a generated neon coach, and a live pose mini-view.
+The repository includes five original Ogg-compressed synth tracks and one
+Scenario-generated original, beat-aligned choreography, lyrics, dynamic
+join/rejoin, 0–5 star scoring, unlocks, controller navigation, video coaching,
+a generated neon coach, and a live pose mini-view.
 
 ## Run
 

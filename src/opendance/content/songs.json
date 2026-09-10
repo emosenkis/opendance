@@ -262,6 +262,47 @@
         {"time": 51.148, "name": "star"},
         {"time": 53.115, "name": "ready"}
       ]
+    },
+    {
+      "id": "brassline_breakaway",
+      "title": "Brassline Breakaway",
+      "artist": "OpenDance Originals (Scenario AI)",
+      "duration": 30.0,
+      "bpm": 120.0107,
+      "beat_offset": 0.18549,
+      "key": "G minor",
+      "audio": "assets/audio/brassline_breakaway.ogg",
+      "preview_start": 16.184,
+      "difficulty": 2,
+      "unlock_cost": 0,
+      "palette": ["#160B2D", "#FFB703", "#FB3C8C", "#38E8D5"],
+      "audio_provenance": {
+        "type": "generative_music",
+        "generator": "Scenario MCP",
+        "model": "model_meta-musicgen",
+        "model_version": "stereo-large",
+        "job_id": "job_FFCH9Cd79rnzZhZpBKbC26KG",
+        "asset_id": "asset_S59dz4oqiQFmd1Drg4nAzbgU",
+        "seed": 71203,
+        "prompt": "Original upbeat polished funk-pop instrumental dance track at exactly 120 BPM in G minor. Punchy four-on-the-floor acoustic drums, syncopated electric bass, live brass stabs, handclaps, strong clean downbeats for choreography, eight-bar opening phrase, no vocals, no copyrighted melody or artist imitation."
+      },
+      "moves": [
+        {"time": 0.18549, "name": "ready"},
+        {"time": 2.185312, "name": "groove_left"},
+        {"time": 4.185133, "name": "groove_right"},
+        {"time": 6.184955, "name": "clap"},
+        {"time": 8.184777, "name": "step_left"},
+        {"time": 10.184598, "name": "step_right"},
+        {"time": 12.18442, "name": "punch_left"},
+        {"time": 14.184242, "name": "punch_right"},
+        {"time": 16.184063, "name": "cross"},
+        {"time": 18.183885, "name": "squat"},
+        {"time": 20.183707, "name": "disco_left"},
+        {"time": 22.183529, "name": "disco_right"},
+        {"time": 24.18335, "name": "wave_left"},
+        {"time": 26.183172, "name": "wave_right"},
+        {"time": 28.182994, "name": "star"}
+      ]
     }
   ]
 }

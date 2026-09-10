@@ -168,13 +168,18 @@ ones where they conflict.
 
 ## Song tooling
 
-- [ ] Add three original, playable songs with deliberate dances whose move
+- [x] Add three original, playable songs with deliberate dances whose move
   landings follow the actual beat grid. Two tracks may use the repository's
   sample-free deterministic synth; at least one must use a real generative-music
   model (prefer Leonardo Music v1), record its provenance honestly, and receive
   choreography timed to the generated audio rather than an assumed tempo.
-  Solar Sidewalk and Velvet Voltage are complete; the Leonardo request is
-  currently blocked by that account's insufficient API-token balance.
+  Solar Sidewalk and Velvet Voltage use the deterministic synth. Brassline
+  Breakaway uses Scenario-hosted Meta MusicGen (`stereo-large`; generation job
+  and asset IDs, seed, and exact prompt live in its catalog provenance). Its 15
+  dance landings follow the measured 120.0107 BPM grid beginning at the detected
+  0.18549-second beat phase. Leonardo Music v1 was attempted first but its API
+  balance is separate from the web Essential plan's Fast Tokens and rejected
+  the request as insufficient.
 - [x] Make original-song coach figures follow human kinematics: keep their
   authored bone lengths fixed in an internal 3D model while allowing natural
   2D foreshortening, rotate each bone over its shortest 3D arc, keep cue landings
