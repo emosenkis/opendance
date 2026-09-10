@@ -169,10 +169,11 @@ ones where they conflict.
   packages that predated move scoring, directly from their saved timelines;
   preserve every other manifest field and keep a recoverable backup while
   validating the migration.
-- [ ] Re-extract the older local Dynamite package from the root `Dynamite.mp4`
+- [x] Re-extract the older local Dynamite package from the root `Dynamite.mp4`
   and validate it in a fresh output directory before replacement. Its saved
   timeline predates stable `dancer_index` roles, so timeline-only move
-  segmentation would silently produce no usable moves.
+  segmentation would silently produce no usable moves. The replacement has one
+  stable role and 133 authored moves; its H.264/AAC media passed real Qt decode.
 - [x] Import optional LRC lyrics and optionally copy the original video into a
   song package.
 - [x] Add extractor flags to trim independently from the beginning and end while
