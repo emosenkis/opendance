@@ -1194,6 +1194,44 @@ class GameSession:
         start = bisect_right(times, float(time_s))
         return deepcopy(self.moves[start : start + max(0, int(count))])
 
+    def next_move_cue(self, time_s: float) -> dict | None:
+        """Return the next authored segment's representative dancer poses."""
+
+        if not self._segments:
+            return None
+        starts = [segment["start"] for segment in self._segments]
+        segment_index = bisect_right(starts, float(time_s))
+        if segment_index >= len(self._segments):
+            return {"name": "", "dancers": []}
+
+        segment = self._segments[segment_index]
+        dancers = []
+        for item in segment["dancers"]:
+            if not isinstance(item, Mapping):
+                continue
+            definition = self._move_definitions.get(item.get("definition"))
+            poses = definition.get("poses") if isinstance(definition, Mapping) else None
+            if not isinstance(poses, Sequence) or isinstance(poses, (str, bytes)):
+                continue
+            try:
+                dancer_index = int(item["dancer_index"])
+                cue_sample = int(definition.get("cue_sample", len(poses) // 2))
+                if dancer_index < 0 or not 0 <= cue_sample < len(poses):
+                    continue
+                pose = _coerce_pose(poses[cue_sample])
+            except (IndexError, KeyError, TypeError, ValueError):
+                continue
+            dancers.append(
+                {
+                    "dancer_index": dancer_index,
+                    "keypoints": [list(point) for point in pose],
+                }
+            )
+        return {
+            "name": str(segment.get("name") or f"MOVE {segment_index + 1}"),
+            "dancers": dancers,
+        }
+
     def ui_players(self) -> list[dict]:
         """Return active players in the JSON-like shape consumed by QML."""
 

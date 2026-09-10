@@ -1390,6 +1390,7 @@ ApplicationWindow {
                     GlassPanel {
                         id: cuePanel
                         visible: !backend.presentationMode && backend.cuesEnabled
+                                 && backend.cueDancers.length > 0
                         anchors.right: parent.right
                         anchors.top: parent.top
                         width: 190 * window.uiScale

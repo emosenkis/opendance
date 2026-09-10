@@ -581,6 +581,9 @@ class Backend(QObject):
     def cueDancers(self) -> list[dict[str, Any]]:
         if self._screen != "game":
             return []
+        cue = self._session.next_move_cue(self._song_time) if self._session else None
+        if cue is not None:
+            return cue["dancers"]
         return target_dancers(
             self._selected_song, min(self.songDuration, self._song_time + 1.5)
         )
@@ -630,6 +633,13 @@ class Backend(QObject):
 
     @Property(str, notify=gameFrameChanged)
     def nextMove(self) -> str:
+        cue = (
+            self._session.next_move_cue(self._song_time)
+            if self._screen == "game" and self._session
+            else None
+        )
+        if cue is not None:
+            return cue["name"]
         return self._timeline_text("moves", True)
 
     @Property(int, notify=gameFrameChanged)

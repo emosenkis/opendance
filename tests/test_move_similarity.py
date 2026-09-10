@@ -32,8 +32,8 @@ def segmented_song():
             "move_scoring": {
                 "schema_version": 1,
                 "definitions": {
-                    "first": {"poses": poses},
-                    "second": {"poses": poses},
+                    "first": {"poses": poses, "cue_sample": 1},
+                    "second": {"poses": poses, "cue_sample": 4},
                 },
                 "segments": [
                     {
@@ -126,6 +126,26 @@ class MoveSimilarityTest(unittest.TestCase):
         feedback = session.finish()
         self.assertEqual(len(feedback), 1)
         self.assertEqual(session.ui_players()[0]["possible_score"], 2_000)
+
+    def test_next_move_cue_uses_the_next_segments_authored_sample(self):
+        song = segmented_song()
+        scoring = song["choreography"]["move_scoring"]
+        scoring["segments"][0]["start"] = 0.1
+        scoring["segments"][1]["start"] = 1.2
+        session = GameSession(song, max_players=1)
+
+        first = session.next_move_cue(0)
+        self.assertEqual(first["name"], "MOVE 1")
+        self.assertEqual(first["dancers"][0]["keypoints"], [
+            list(point) for point in scoring["definitions"]["first"]["poses"][1]
+        ])
+        second = session.next_move_cue(0.5)
+        self.assertEqual(second["name"], "MOVE 2")
+        self.assertEqual(second, session.next_move_cue(1.1))
+        self.assertEqual(session.next_move_cue(1.2)["dancers"], [])
+
+        del song["choreography"]["move_scoring"]
+        self.assertIsNone(GameSession(song, max_players=1).next_move_cue(0))
 
 
 if __name__ == "__main__":

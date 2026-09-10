@@ -119,7 +119,7 @@ ones where they conflict.
 - [x] Put scoring and judgement feedback in the active-player row across the
   top; allow each song to shrink/inset its video while defaulting video scale
   to 100%.
-- [ ] Change heads-up cues from a constant N-seconds-ahead live pose to the next
+- [x] Change heads-up cues from a constant N-seconds-ahead live pose to the next
   discrete segmented dance move, using that move's authored representative cue
   pose rather than an arbitrary future video frame.
 - [ ] Experiment with clustering repeated occurrences of a move into one move
