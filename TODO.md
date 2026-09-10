@@ -165,6 +165,10 @@ ones where they conflict.
 
 ## Song tooling
 
+- [x] Add a cross-platform local-song reprocessing script that detects the
+  current move-scoring signature, rebuilds only stale derived artifacts from
+  saved stable-role timelines, preserves all other package data, creates a
+  non-overwritten manifest backup, and supports a dry run.
 - [x] Backfill authored move segments into the five role-aware local song
   packages that predated move scoring, directly from their saved timelines;
   preserve every other manifest field and keep a recoverable backup while

@@ -35,7 +35,9 @@ _WORD_TIME_TAG = re.compile(r"<\d{1,3}:\d{2}(?:\.\d{1,3})?>")
 _SONG_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _SCENE_CUT_DELTA = 0.12
 _ROLE_DISCONTINUITY = 0.72
-_MOVE_PHASES = 12
+MOVE_SCORING_SCHEMA_VERSION = 1
+MOVE_SCORING_FEATURE = "coco17-motion-v1"
+MOVE_SCORING_PHASES = 12
 _MOVE_MIN_SECONDS = 0.75
 _MOVE_MAX_SECONDS = 3.0
 _MOVE_CONFIDENCE = 0.20
@@ -658,9 +660,10 @@ def _move_definition(
     samples: Sequence[tuple[float, Sequence]], start: float, end: float
 ) -> dict[str, Any] | None:
     poses = []
-    for phase in range(_MOVE_PHASES):
+    for phase in range(MOVE_SCORING_PHASES):
         pose = _pose_at(
-            samples, start + (end - start) * phase / (_MOVE_PHASES - 1)
+            samples,
+            start + (end - start) * phase / (MOVE_SCORING_PHASES - 1),
         )
         if pose is None:
             return None
@@ -683,14 +686,14 @@ def _move_definition(
     cue_delta = [_motion_delta(poses[0], pose) for pose in poses]
     cue_sample = (
         max(
-            range(_MOVE_PHASES),
+            range(MOVE_SCORING_PHASES),
             key=lambda phase: sum(
                 (cue_delta[phase][index] or 0.0)
                 for index in important or _MOVE_BODY_JOINTS
             ),
         )
         if peak > 1e-9
-        else _MOVE_PHASES // 2
+        else MOVE_SCORING_PHASES // 2
     )
     return {
         "poses": [
@@ -710,10 +713,10 @@ def _build_move_scoring(
     timeline: Sequence[dict[str, Any]], dancer_count: int
 ) -> dict[str, Any]:
     artifact: dict[str, Any] = {
-        "schema_version": 1,
-        "feature": "coco17-motion-v1",
+        "schema_version": MOVE_SCORING_SCHEMA_VERSION,
+        "feature": MOVE_SCORING_FEATURE,
         "pose_coordinate_space": "normalized_image",
-        "phase_count": _MOVE_PHASES,
+        "phase_count": MOVE_SCORING_PHASES,
         "definitions": {},
         "segments": [],
     }

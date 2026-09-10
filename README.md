@@ -178,6 +178,18 @@ uv run opendance-extract dance.mp4 songs/my-song --copy-video \
 
 Use `--pose-backend rtmpose --rtmpose-mode lightweight` after syncing the
 `rtmpose` extra to extract through the alternate implementation.
+
+After a move-scoring format update, refresh every stale role-aware local package
+directly from its saved timeline (no video inference required):
+
+```console
+uv run python tools/reprocess_songs.py --dry-run
+uv run python tools/reprocess_songs.py
+```
+
+Pass package directories or `song.json` paths to limit the scan. The script
+keeps the first replaced manifest as `song.json.bak`; timelines old enough to
+lack stable dancer roles are left untouched and require full video extraction.
 Trim values are seconds. `--hide-video-intro` is measured after the start trim;
 its audio still plays behind a get-ready visualization, while those frames are
 excluded from choreography and scoring. Trimming is lossless: copied media stays
