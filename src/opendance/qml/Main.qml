@@ -417,20 +417,31 @@ ApplicationWindow {
         y: coachVideo.y + coachVideo.contentRect.y
         width: coachVideo.contentRect.width
         height: coachVideo.contentRect.height
+        readonly property var dancers: visible ? backend.targetDancers : []
         visible: window.screenName === "play" && !backend.presentationMode
                  && coachVideo.visible
         clip: true
         z: 2
 
-        Repeater {
-            model: dancerAssignmentMarkers.visible ? backend.targetDancers : []
+        function dancer(dancerIndex) {
+            for (var index = 0; index < dancers.length; ++index) {
+                if (Number(dancers[index].dancer_index) === dancerIndex)
+                    return dancers[index]
+            }
+            return ({})
+        }
 
-            Rectangle {
+        Repeater {
+            model: dancerAssignmentMarkers.dancers.length
+
+            Item {
                 required property int index
-                required property var modelData
+                readonly property var modelData: dancerAssignmentMarkers.dancer(index)
                 readonly property var box: modelData.bbox || []
-                readonly property int dancerIndex: Number(modelData.dancer_index !== undefined
-                                                           ? modelData.dancer_index : index)
+                readonly property int dancerIndex: index
+                readonly property color dancerColor: window.playerColor(dancerIndex)
+                readonly property color cloudColor: Qt.rgba(dancerColor.r, dancerColor.g,
+                                                              dancerColor.b, 0.38)
                 visible: box.length >= 4
                 x: Math.max(0, Math.min(dancerAssignmentMarkers.width - width,
                                        (Number(box[0]) + Number(box[2]) / 2)
@@ -438,19 +449,54 @@ ApplicationWindow {
                 y: Math.max(0, Math.min(dancerAssignmentMarkers.height - height,
                                        (Number(box[1]) + Number(box[3]))
                                        * dancerAssignmentMarkers.height + 4 * window.uiScale))
-                width: 58 * window.uiScale
-                height: 19 * window.uiScale
-                radius: height / 2
-                color: "#b2080a12"
-                border.width: 2
-                border.color: window.playerColor(dancerIndex)
+                width: 72 * window.uiScale
+                height: 24 * window.uiScale
+
+                Behavior on x {
+                    SmoothedAnimation { duration: 550; velocity: 1000 * window.uiScale }
+                }
+
+                Behavior on y {
+                    SmoothedAnimation { duration: 650; velocity: 1000 * window.uiScale }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 15 * window.uiScale
+                    radius: height / 2
+                    color: parent.cloudColor
+                    border.width: 1
+                    border.color: Qt.rgba(parent.dancerColor.r, parent.dancerColor.g,
+                                          parent.dancerColor.b, 0.72)
+                }
+
+                Rectangle {
+                    x: 12 * window.uiScale
+                    y: 4 * window.uiScale
+                    width: 24 * window.uiScale
+                    height: 17 * window.uiScale
+                    radius: height / 2
+                    color: parent.cloudColor
+                }
+
+                Rectangle {
+                    x: 34 * window.uiScale
+                    width: 25 * window.uiScale
+                    height: 20 * window.uiScale
+                    radius: height / 2
+                    color: parent.cloudColor
+                }
 
                 Label {
                     anchors.centerIn: parent
                     text: "D" + (parent.dancerIndex + 1)
-                    color: parent.border.color
+                    color: "#ffffff"
                     font.pixelSize: 10 * window.uiScale
                     font.weight: Font.Black
+                    style: Text.Outline
+                    styleColor: "#80070a12"
                 }
             }
         }

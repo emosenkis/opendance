@@ -138,8 +138,10 @@ ones where they conflict.
 - [x] Make every live-player-to-authored-dancer assignment unmistakable: use one
   stable dancer color on that player's score bar, their next-move cue, and their
   real-time mini-view skeleton, label the player/dancer relationship directly,
-  and optionally place the same-color highlight below the corresponding dancer
-  in source video. Players assigned duplicate choreography share its color.
+  and place the same-color semi-transparent cloud bar below the corresponding
+  dancer's feet in source video. Keep each bar keyed to its dancer role and
+  heavily smooth its position so foot/bounding-box jitter does not make it hop;
+  players assigned duplicate choreography share its color.
 - [x] Remove score/judgement sound effects while a song is being played; retain
   the song/video audio and visual feedback. This supersedes the earlier request
   for frequent audible gameplay stingers.
