@@ -1,3 +1,4 @@
+import gc
 import json
 from pathlib import Path
 import sys
@@ -5,6 +6,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import weakref
 
 from opendance.extract import _build_move_scoring, analyze_video, extract_song
 from opendance.game import (
@@ -39,6 +41,40 @@ def transformed(name, dx, scale):
 
 
 class MultiDancerTest(unittest.TestCase):
+    def test_switching_songs_releases_the_previous_dense_timeline(self):
+        class Timeline(list):
+            pass
+
+        def song(timeline, track_id):
+            return {
+                "moves": [],
+                "choreography": {
+                    "dancer_track_ids": [track_id],
+                    "lead_dancer_index": 0,
+                    "timeline": timeline,
+                },
+            }
+
+        first = Timeline([
+            {
+                "timestamp_ms": 0,
+                "people": [dict(person(1, "ready", 0, [0, 0, 1, 1]), dancer_index=0)],
+            }
+        ])
+        first_reference = weakref.ref(first)
+        target_dancers(song(first, 1), 0)
+        second = Timeline([
+            {
+                "timestamp_ms": 0,
+                "people": [dict(person(2, "star", 0, [0, 0, 1, 1]), dancer_index=0)],
+            }
+        ])
+        target_dancers(song(second, 2), 0)
+        del first
+        gc.collect()
+
+        self.assertIsNone(first_reference())
+
     def test_move_scoring_segments_normalized_multi_dancer_motion(self):
         timeline = []
         for frame_index in range(12):

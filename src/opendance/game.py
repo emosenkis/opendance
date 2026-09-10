@@ -306,6 +306,17 @@ _TIMELINE_CACHE: dict[
 ] = {}
 
 
+def _activate_timeline_cache(timeline: object) -> None:
+    cached = next(iter(_EXTRACTED_CACHE.values()), None)
+    if cached is None:
+        cached = next(iter(_TIMELINE_CACHE.values()), None)
+    if cached is not None and cached[0] is not timeline:
+        # Only one song can play; retaining earlier dense timelines costs
+        # hundreds of MB across an ordinary multi-song session.
+        _EXTRACTED_CACHE.clear()
+        _TIMELINE_CACHE.clear()
+
+
 def _frame_time(frame: Mapping) -> float:
     if "time" in frame:
         return float(frame["time"])
@@ -402,6 +413,7 @@ def _extracted_keyframes(
     timeline = choreography.get("timeline", choreography.get("frames", ()))
     if not isinstance(timeline, Sequence) or isinstance(timeline, (str, bytes)):
         return ()
+    _activate_timeline_cache(timeline)
     dancers = choreography_dancers(song)
     role_index: int | None = None
     if dancer_index is None:
@@ -441,8 +453,6 @@ def _extracted_keyframes(
         elif timestamp == keyframes[-1][0]:
             keyframes[-1] = (timestamp, pose)
     result = tuple(keyframes)
-    if len(_EXTRACTED_CACHE) >= 8:
-        _EXTRACTED_CACHE.pop(next(iter(_EXTRACTED_CACHE)))
     _EXTRACTED_CACHE[cache_key] = (timeline, result)
     return result
 
@@ -508,6 +518,7 @@ def _timeline_at(song: Mapping, time_s: float) -> Mapping | None:
     timeline = choreography.get("timeline", choreography.get("frames", ()))
     if not isinstance(timeline, Sequence) or isinstance(timeline, (str, bytes)):
         return None
+    _activate_timeline_cache(timeline)
     cache_key = id(timeline)
     cached = _TIMELINE_CACHE.get(cache_key)
     if cached is None or cached[0] is not timeline:
@@ -521,8 +532,6 @@ def _timeline_at(song: Mapping, time_s: float) -> Mapping | None:
                 continue
         timed.sort(key=lambda item: item[0])
         cached = (timeline, tuple(item[0] for item in timed), tuple(item[1] for item in timed))
-        if len(_TIMELINE_CACHE) >= 8:
-            _TIMELINE_CACHE.pop(next(iter(_TIMELINE_CACHE)))
         _TIMELINE_CACHE[cache_key] = cached
     _, times, frames = cached
     if not times:

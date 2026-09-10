@@ -27,7 +27,14 @@ ones where they conflict.
   `NV_ERR_NO_MEMORY` in the middle of a song after roughly five complete songs
   with 3–5 players. Reproduce and measure memory across repeated song starts,
   finishes, and retries; do not assume player/dancer count is the cause merely
-  because that was the observed workload.
+  because that was the observed workload. Code review found no repeated model or
+  inference-thread creation; local probes held YOLO at 43.3 MiB allocated / 82
+  MiB reserved across 100 CUDA frames and returned Qt video decoding from 55 MiB
+  to 3 MiB after each of ten source-clear cycles. Real GPU decoder/model memory
+  still needs a repeated-play measurement on the target laptop.
+  - [x] Stop dense-timeline caches from retaining several previously played
+    songs in CPU/system memory; keep only the active song and verify the old
+    timeline becomes collectible.
 
 ## Pose, cameras, and identity
 
