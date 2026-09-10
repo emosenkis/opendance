@@ -168,6 +168,13 @@ ones where they conflict.
 
 ## Song tooling
 
+- [ ] Add three original, playable songs with deliberate dances whose move
+  landings follow the actual beat grid. Two tracks may use the repository's
+  sample-free deterministic synth; at least one must use a real generative-music
+  model (prefer Leonardo Music v1), record its provenance honestly, and receive
+  choreography timed to the generated audio rather than an assumed tempo.
+  Solar Sidewalk and Velvet Voltage are complete; the Leonardo request is
+  currently blocked by that account's insufficient API-token balance.
 - [x] Make original-song coach figures follow human kinematics: keep their
   authored bone lengths fixed in an internal 3D model while allowing natural
   2D foreshortening, rotate each bone over its shortest 3D arc, keep cue landings

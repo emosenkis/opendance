@@ -170,11 +170,24 @@ class GameCoreTest(unittest.TestCase):
         catalog = load_catalog()
         self.assertEqual(
             [song["id"] for song in catalog],
-            ["neon_first_light", "pixel_heart_rush", "cosmic_afterburn"],
+            [
+                "neon_first_light",
+                "pixel_heart_rush",
+                "cosmic_afterburn",
+                "solar_sidewalk",
+                "velvet_voltage",
+            ],
         )
         for song in catalog:
             for move in song["moves"]:
                 self.assertEqual(len(named_pose(move["name"])), 17)
+        for song in catalog[-2:]:
+            for index, move in enumerate(song["moves"]):
+                self.assertAlmostEqual(
+                    float(move["time"]) * float(song["bpm"]) / 60,
+                    index * 4,
+                    delta=0.0011,
+                )
         extracted = {
             "id": "video",
             "title": "Video",
