@@ -15,6 +15,7 @@ from opendance.app import (
     MAX_PLAYERS,
     _enabled,
     _interpolated_media_time,
+    song_preview,
     song_manifest_metadata,
     song_media_path,
 )
@@ -39,6 +40,40 @@ class PlaybackPolicyTest(unittest.TestCase):
             self.assertEqual(song_media_path(song, "video"), video.resolve())
             video.unlink()
             self.assertIsNone(song_media_path(song, "video"))
+
+    def test_song_preview_resolves_media_and_respects_trimmed_video_intro(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "coach.mp4").touch()
+            (root / "mix.ogg").touch()
+            preview = song_preview(
+                {
+                    "_root": directory,
+                    "video": "coach.mp4",
+                    "audio": "mix.ogg",
+                    "duration": 20,
+                    "media_start": 2.5,
+                    "video_hidden_until": 6,
+                    "preview_start": 3,
+                    "preview_duration": 30,
+                }
+            )
+
+            self.assertTrue(preview["previewVideoUrl"].endswith("/coach.mp4"))
+            self.assertTrue(preview["previewAudioUrl"].endswith("/mix.ogg"))
+            self.assertEqual(preview["previewStartMs"], 8_500)
+            self.assertEqual(preview["previewDurationMs"], 14_000)
+
+    def test_song_preview_defaults_to_an_eight_second_middle_excerpt(self):
+        with TemporaryDirectory() as directory:
+            audio = Path(directory) / "song.ogg"
+            audio.touch()
+            preview = song_preview(
+                {"_root": directory, "audio": audio.name, "duration": 40}
+            )
+
+            self.assertEqual(preview["previewStartMs"], 14_000)
+            self.assertEqual(preview["previewDurationMs"], 8_000)
 
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)

@@ -704,8 +704,42 @@ ApplicationWindow {
                                         }
                                     }
 
+                                    Loader {
+                                        id: previewLoader
+                                        anchors.fill: parent
+                                        active: songDelegate.selected
+                                                && window.screenName === "library"
+                                                && previewDuration > 0
+                                                && (String(previewVideo) !== ""
+                                                    || String(previewAudio) !== "")
+                                        readonly property url previewVideo: window.itemValue(
+                                                                 songDelegate.modelData,
+                                                                 "previewVideoUrl", "")
+                                        readonly property url previewAudio: window.itemValue(
+                                                                 songDelegate.modelData,
+                                                                 "previewAudioUrl", "")
+                                        readonly property int previewStart: window.itemValue(
+                                                                  songDelegate.modelData,
+                                                                  "previewStartMs", 0)
+                                        readonly property int previewDuration: window.itemValue(
+                                                                     songDelegate.modelData,
+                                                                     "previewDurationMs", 0)
+
+                                        sourceComponent: Component {
+                                            SongPreview {
+                                                videoSource: previewLoader.previewVideo
+                                                audioSource: previewLoader.previewAudio
+                                                startMs: previewLoader.previewStart
+                                                durationMs: previewLoader.previewDuration
+                                                outputVolume: backend.volume
+                                            }
+                                        }
+                                    }
+
                                     Label {
                                         anchors.centerIn: parent
+                                        visible: !previewLoader.active
+                                                 || String(previewLoader.previewVideo) === ""
                                         text: songDelegate.locked ? "\u26BF" : "\u266B"
                                         color: songDelegate.locked ? "#d4d9e5" : "#ffffff"
                                         font.pixelSize: 76 * window.uiScale

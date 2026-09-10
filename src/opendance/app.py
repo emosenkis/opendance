@@ -110,6 +110,32 @@ def _song_seconds(song: dict[str, Any], key: str) -> float:
     return value if math.isfinite(value) and value >= 0 else 0.0
 
 
+def song_preview(song: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one short, song-relative library preview for QML."""
+
+    video = song_media_path(song, "video")
+    audio = song_media_path(song, "audio")
+    duration = _song_seconds(song, "duration")
+    hidden_until = min(duration, _song_seconds(song, "video_hidden_until"))
+    start = (
+        _song_seconds(song, "preview_start")
+        if "preview_start" in song
+        else duration * 0.35
+    )
+    start = min(duration, max(hidden_until, start))
+    length = min(
+        _song_seconds(song, "preview_duration") or 8.0,
+        max(0.0, duration - start),
+    )
+    media_start = _song_seconds(song, "media_start")
+    return {
+        "previewVideoUrl": QUrl.fromLocalFile(str(video)).toString() if video else "",
+        "previewAudioUrl": QUrl.fromLocalFile(str(audio)).toString() if audio else "",
+        "previewStartMs": round((media_start + start) * 1_000),
+        "previewDurationMs": round(length * 1_000),
+    }
+
+
 def framing_nudge(bbox: Any, target_height: float = 0.72) -> str:
     """Return a camera-distance cue for one normalized ``x, y, w, h`` box."""
 
@@ -491,6 +517,7 @@ class Backend(QObject):
             locked=self._points < self._unlock_cost(song),
             unlock_cost=self._unlock_cost(song),
             bestStars=int(self.settings.value(f"profile/best/{song_id}/stars", 0)),
+            **song_preview(song),
         )
 
     @property

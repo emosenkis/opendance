@@ -158,8 +158,11 @@ ones where they conflict.
   camera framing plainly or calibrate it automatically when reliable.
 - [x] Keep the settings screen populated and navigation-tested at both supported
   window sizes; never route to a background-only/blank page.
-- [ ] Play an interesting short audio/video preview inside the selected song
-  card, with an audio fade-in and fade-out.
+- [x] Play an interesting short audio/video preview inside the selected song
+  card, with an audio fade-in and fade-out. Use an authored song-relative start
+  when provided (otherwise a middle excerpt), honor media trims and hidden video
+  intros, support embedded or separate audio, and stop immediately when the
+  selection or screen changes.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 

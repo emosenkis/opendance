@@ -197,7 +197,9 @@ byte-identical and the package records playback offsets instead of transcoding.
 
 An imported package may reference a coach `video`, separate `audio`, LRC-derived
 `lyrics`, named `moves`, or a dense `choreography.timeline`. Relative media paths
-are resolved from the package directory. Keep media you have rights to use.
+are resolved from the package directory. Optional song-relative `preview_start`
+and `preview_duration` values choose the faded library-card excerpt. Keep media
+you have rights to use.
 
 ## Play an extracted package
 
