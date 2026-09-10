@@ -46,8 +46,11 @@ ones where they conflict.
 - [x] Discover and select among multiple cameras, preferring recognized USB
   cameras over an integrated laptop camera by default while remembering an
   explicit choice.
-- [x] Actually start the visibly selected default/only camera when setup opens;
-  do not require clicking the already-selected camera first.
+- [x] Automatically start the visibly selected camera whenever pre-game setup
+  opens; do not require clicking an already-selected row. If cameras arrive
+  asynchronously and the user has not made a manual source choice, promote and
+  start the newly available highest-ranked camera while preserving explicit
+  camera, video-file, and demo selections.
 - [x] Accept a video file through the same decoded-frame pose pipeline as a
   simulated webcam, without requiring a virtual-camera utility.
 - [x] Hide video-file and simulated-dancer sources unless enabled by a Cyclopts

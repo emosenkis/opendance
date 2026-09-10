@@ -100,6 +100,74 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertEqual(backend._selected_source, b"usb-camera".hex())
         backend._apply_source.assert_called_once_with()
 
+    def test_new_preferred_camera_replaces_an_automatic_fallback(self):
+        integrated = SimpleNamespace(
+            id=lambda: b"integrated-camera",
+            description=lambda: "Integrated Camera",
+        )
+        usb = SimpleNamespace(
+            id=lambda: b"usb-camera",
+            description=lambda: "USB Camera",
+        )
+        backend = Backend.__new__(Backend)
+        backend.settings = SimpleNamespace(value=lambda *_args, **_kwargs: "")
+        backend._camera_devices = {}
+        backend._cameras = []
+        backend._selected_source = ""
+        backend._alternate_sources_enabled = False
+        backend._capture_sink = object()
+        backend._camera = None
+        backend.changed = SimpleNamespace(emit=Mock())
+        backend._apply_source = Mock()
+
+        with patch(
+            "opendance.app.QMediaDevices.videoInputs",
+            side_effect=[[integrated], [integrated, usb]],
+        ):
+            backend.refreshCameras()
+            backend.refreshCameras()
+
+        self.assertEqual(backend._selected_source, b"usb-camera".hex())
+        self.assertEqual(backend._apply_source.call_count, 2)
+
+    def test_manual_camera_choice_survives_a_device_refresh(self):
+        integrated_id = b"integrated-camera".hex()
+        integrated = SimpleNamespace(
+            id=lambda: b"integrated-camera",
+            description=lambda: "Integrated Camera",
+        )
+        usb = SimpleNamespace(
+            id=lambda: b"usb-camera",
+            description=lambda: "USB Camera",
+        )
+        values = {}
+        backend = Backend.__new__(Backend)
+        backend.settings = SimpleNamespace(
+            value=lambda key, *_args, **_kwargs: values.get(key, ""),
+            setValue=lambda key, value: values.__setitem__(key, value),
+        )
+        backend._camera_devices = {}
+        backend._cameras = []
+        backend._selected_source = ""
+        backend._alternate_sources_enabled = False
+        backend._capture_sink = object()
+        backend._camera = None
+        backend.changed = SimpleNamespace(emit=Mock())
+        backend._apply_source = Mock()
+
+        with patch(
+            "opendance.app.QMediaDevices.videoInputs",
+            return_value=[integrated, usb],
+        ):
+            backend.refreshCameras()
+            backend.selectSource(integrated_id)
+            calls_after_selection = backend._apply_source.call_count
+            backend._camera = object()
+            backend.refreshCameras()
+
+        self.assertEqual(backend._selected_source, integrated_id)
+        self.assertEqual(backend._apply_source.call_count, calls_after_selection)
+
     def test_media_clock_waits_for_playback_then_interpolates(self):
         self.assertEqual(_interpolated_media_time(0, None, 12, True), 0)
         self.assertEqual(_interpolated_media_time(2.5, 10, 10.2, False), 2.5)

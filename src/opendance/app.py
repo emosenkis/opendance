@@ -864,7 +864,10 @@ class Backend(QObject):
         )
         self._cameras = camera_rows + alternate_rows
         valid = {row["id"] for row in self._cameras}
-        if self._selected_source not in valid:
+        if self._selected_source not in valid or (
+            self._selected_source in self._camera_devices
+            and self._selected_source != saved
+        ):
             self._selected_source = camera_rows[0]["id"] if camera_rows else ""
         self.changed.emit()
         if self._capture_sink and (
