@@ -411,6 +411,51 @@ ApplicationWindow {
         lineScale: 1.45
     }
 
+    Item {
+        id: dancerAssignmentMarkers
+        x: coachVideo.x + coachVideo.contentRect.x
+        y: coachVideo.y + coachVideo.contentRect.y
+        width: coachVideo.contentRect.width
+        height: coachVideo.contentRect.height
+        visible: window.screenName === "play" && !backend.presentationMode
+                 && coachVideo.visible
+        clip: true
+        z: 2
+
+        Repeater {
+            model: dancerAssignmentMarkers.visible ? backend.targetDancers : []
+
+            Rectangle {
+                required property int index
+                required property var modelData
+                readonly property var box: modelData.bbox || []
+                readonly property int dancerIndex: Number(modelData.dancer_index !== undefined
+                                                           ? modelData.dancer_index : index)
+                visible: box.length >= 4
+                x: Math.max(0, Math.min(dancerAssignmentMarkers.width - width,
+                                       (Number(box[0]) + Number(box[2]) / 2)
+                                       * dancerAssignmentMarkers.width - width / 2))
+                y: Math.max(0, Math.min(dancerAssignmentMarkers.height - height,
+                                       (Number(box[1]) + Number(box[3]))
+                                       * dancerAssignmentMarkers.height + 4 * window.uiScale))
+                width: 58 * window.uiScale
+                height: 19 * window.uiScale
+                radius: height / 2
+                color: "#b2080a12"
+                border.width: 2
+                border.color: window.playerColor(dancerIndex)
+
+                Label {
+                    anchors.centerIn: parent
+                    text: "D" + (parent.dancerIndex + 1)
+                    color: parent.border.color
+                    font.pixelSize: 10 * window.uiScale
+                    font.weight: Font.Black
+                }
+            }
+        }
+    }
+
     StackLayout {
         id: contentStack
         anchors.fill: parent

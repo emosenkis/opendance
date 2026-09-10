@@ -125,7 +125,7 @@ ones where they conflict.
 - [ ] Experiment with clustering repeated occurrences of a move into one move
   definition and identical scoring/cues; try a distinctive still pose or arrows
   on the one to three most important moving body parts instead of animation.
-- [ ] Make every live-player-to-authored-dancer assignment unmistakable: use one
+- [x] Make every live-player-to-authored-dancer assignment unmistakable: use one
   stable dancer color on that player's score bar, their next-move cue, and their
   real-time mini-view skeleton, label the player/dancer relationship directly,
   and optionally place the same-color highlight below the corresponding dancer

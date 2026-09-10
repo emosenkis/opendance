@@ -37,9 +37,14 @@ GlassPanel {
 
             Label {
                 anchors.centerIn: parent
-                text: root.player ? "P" + root.playerNumber : "+"
+                text: root.player
+                      ? "P" + root.playerNumber
+                        + (root.player.dancer_index !== undefined
+                           ? "→D" + (Number(root.player.dancer_index) + 1) : "")
+                      : "+"
                 color: root.player ? "#ffffff" : "#8d97ab"
-                font.pixelSize: 17 * root.contentScale
+                font.pixelSize: (root.player && root.player.dancer_index !== undefined ? 12 : 17)
+                                * root.contentScale
                 font.weight: Font.Black
             }
 

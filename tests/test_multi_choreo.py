@@ -181,6 +181,10 @@ class MultiDancerTest(unittest.TestCase):
         self.assertEqual(
             [player["dancer_index"] for player in session.ui_players()], [0, 1]
         )
+        self.assertEqual(
+            {dancer["dancer_index"]: dancer["bbox"][0] for dancer in rendered},
+            {0: 0.1, 1: 0.7},
+        )
 
     def test_video_analysis_does_not_infer_before_requested_time(self):
         class Capture:
