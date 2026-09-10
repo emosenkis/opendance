@@ -62,6 +62,11 @@ ones where they conflict.
   partial false positives do not become players.
 - [x] Reset extraction smoothing at detected scene cuts and smooth stable dancer
   roles across raw tracker-ID changes.
+- [x] Prevent instantaneous multi-dancer role shuffles during extraction,
+  including pair swaps and larger cyclic permutations: discard recycled tracker
+  bindings at shot cuts and override IDs only when two or more roles would make
+  physically implausible one-frame position jumps. Preserve identity through
+  gradual on-screen crossings and front/behind changes.
 - [x] Show clear on-screen nudges to move forward or back, with a framing
   calibration control.
 - [x] Research equally capable hands/feet and monocular 3D models without

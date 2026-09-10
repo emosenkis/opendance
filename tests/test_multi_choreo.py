@@ -8,7 +8,12 @@ import unittest
 from unittest.mock import patch
 import weakref
 
-from opendance.extract import _build_move_scoring, analyze_video, extract_song
+from opendance.extract import (
+    _build_move_scoring,
+    _role_timeline,
+    analyze_video,
+    extract_song,
+)
 from opendance.game import (
     GameSession,
     assign_dancers,
@@ -40,7 +45,163 @@ def transformed(name, dx, scale):
     ]
 
 
+def placed_person(track_id, x):
+    return person(track_id, "ready", x - 0.5, [x - 0.05, 0.1, 0.1, 0.8])
+
+
+def assigned_timeline(frames):
+    first_people = frames[0]["people"]
+    seed_ids = [item["track_id"] for item in first_people]
+    stats = {
+        item["track_id"]: {
+            "frames": 1.0,
+            "x": item["bbox"][0] + item["bbox"][2] / 2,
+        }
+        for item in first_people
+    }
+    return _role_timeline(frames, len(seed_ids), seed_ids, stats, 0)[0]
+
+
 class MultiDancerTest(unittest.TestCase):
+    def test_scene_cut_rebinds_recycled_ids_by_location(self):
+        frames = [
+            {
+                "timestamp_ms": 0,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((1, 2, 3), (0.15, 0.5, 0.85))
+                ],
+            },
+            {
+                "timestamp_ms": 1_000,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((1, 2, 3), (0.85, 0.5, 0.15))
+                ],
+            },
+            {
+                "timestamp_ms": 1_033,
+                "scene_cut": True,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((1, 2, 3), (0.15, 0.5, 0.85))
+                ],
+            },
+            {
+                "timestamp_ms": 1_066,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((1, 2, 3), (0.15, 0.5, 0.85))
+                ],
+            },
+        ]
+
+        timeline = assigned_timeline(frames)
+
+        self.assertEqual(
+            [
+                {item["track_id"]: item["dancer_index"] for item in frame["people"]}
+                for frame in timeline[1:]
+            ],
+            [{1: 0, 2: 1, 3: 2}, {1: 2, 2: 1, 3: 0}, {1: 2, 2: 1, 3: 0}],
+        )
+
+    def test_role_assignment_rejects_an_instant_four_dancer_cycle(self):
+        frames = [
+            {
+                "timestamp_ms": 0,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((1, 2, 3, 4), (0.125, 0.375, 0.625, 0.875))
+                ],
+            },
+            {
+                "timestamp_ms": 33,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((4, 1, 2, 3), (0.125, 0.375, 0.625, 0.875))
+                ],
+            },
+            {
+                "timestamp_ms": 66,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((4, 1, 2, 3), (0.125, 0.375, 0.625, 0.875))
+                ],
+            },
+        ]
+
+        timeline = assigned_timeline(frames)
+
+        self.assertEqual(
+            [
+                {item["track_id"]: item["dancer_index"] for item in frame["people"]}
+                for frame in timeline
+            ],
+            [
+                {1: 0, 2: 1, 3: 2, 4: 3},
+                {4: 0, 1: 1, 2: 2, 3: 3},
+                {4: 0, 1: 1, 2: 2, 3: 3},
+            ],
+        )
+
+    def test_role_assignment_keeps_ids_through_a_gradual_crossing(self):
+        frames = [
+            {
+                "timestamp_ms": timestamp,
+                "people": [placed_person(1, left), placed_person(2, right)],
+            }
+            for timestamp, left, right in (
+                (0, 0.25, 0.75),
+                (250, 0.4, 0.6),
+                (500, 0.55, 0.45),
+                (750, 0.7, 0.3),
+            )
+        ]
+
+        timeline = assigned_timeline(frames)
+
+        self.assertTrue(
+            all(
+                {item["track_id"]: item["dancer_index"] for item in frame["people"]}
+                == {1: 0, 2: 1}
+                for frame in timeline
+            )
+        )
+
+    def test_stale_track_cannot_evict_the_current_role_occupant(self):
+        frames = [
+            {
+                "timestamp_ms": 0,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((95, 85, 107, 88), (0.125, 0.375, 0.77, 0.875))
+                ],
+            },
+            {
+                "timestamp_ms": 33,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((100, 85, 107, 88), (0.61, 0.375, 0.77, 0.875))
+                ],
+            },
+            {
+                "timestamp_ms": 66,
+                "people": [
+                    placed_person(track_id, x)
+                    for track_id, x in zip((95, 85, 100, 88), (0.43, 0.375, 0.61, 0.875))
+                ],
+            },
+        ]
+
+        timeline = assigned_timeline(frames)
+        final = {
+            item["track_id"]: item["dancer_index"]
+            for item in timeline[-1]["people"]
+        }
+
+        self.assertEqual(final, {100: 0, 85: 1, 95: 2, 88: 3})
+
     def test_switching_songs_releases_the_previous_dense_timeline(self):
         class Timeline(list):
             pass
@@ -460,7 +621,7 @@ class MultiDancerTest(unittest.TestCase):
                 {11: 0, 22: 1},
                 {11: 0, 22: 1},
                 {33: 0, 44: 1},
-                {55: 0, 66: 1},
+                {66: 0, 55: 1},
             ],
         )
         self.assertEqual(choreography["timeline"][0]["depth_order"], [1, 0])

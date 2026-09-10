@@ -35,6 +35,8 @@ _WORD_TIME_TAG = re.compile(r"<\d{1,3}:\d{2}(?:\.\d{1,3})?>")
 _SONG_ID = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _SCENE_CUT_DELTA = 0.12
 _ROLE_DISCONTINUITY = 0.72
+_ROLE_JUMP_MARGIN = 0.08
+_ROLE_MAX_SPEED = 0.8
 MOVE_SCORING_SCHEMA_VERSION = 1
 MOVE_SCORING_FEATURE = "coco17-motion-v1"
 MOVE_SCORING_PHASES = 12
@@ -242,6 +244,7 @@ def _role_cost(
     role: int,
     dancer_count: int,
     previous: dict[str, Any] | None,
+    spatial_only: bool = False,
 ) -> float:
     bbox = person["bbox"]
     center = (bbox[0] + bbox[2] / 2, bbox[1] + bbox[3] / 2)
@@ -255,6 +258,12 @@ def _role_cost(
         old_bbox[0] + old_bbox[2] / 2,
         old_bbox[1] + old_bbox[3] / 2,
     )
+    if spatial_only:
+        return (
+            abs(center[0] - old_center[0])
+            + 0.25 * abs(center[1] - old_center[1])
+            + quality_penalty
+        )
     area = max(1e-6, bbox[2] * bbox[3])
     old_area = max(1e-6, old_bbox[2] * old_bbox[3])
     try:
@@ -277,6 +286,8 @@ def _best_role_assignment(
     roles: Sequence[int],
     dancer_count: int,
     previous: dict[int, dict[str, Any]],
+    *,
+    spatial_only: bool = False,
 ) -> tuple[dict[int, dict[str, Any]], float]:
     count = min(len(candidates), len(roles))
     if count == 0:
@@ -291,6 +302,7 @@ def _best_role_assignment(
                     role,
                     dancer_count,
                     previous.get(role),
+                    spatial_only,
                 )
                 for role, candidate_index in pairs
             )
@@ -349,7 +361,7 @@ def _role_timeline(
             if person.get("track_id") is not None
             and int(person["track_id"]) in track_roles
         }
-        scene_cut = bool(source_frame.get("scene_cut")) and not known_ids
+        scene_cut = bool(source_frame.get("scene_cut"))
         if not scene_cut and previous and not known_ids:
             _, continuity_cost = _best_role_assignment(
                 source_people,
@@ -363,24 +375,35 @@ def _role_timeline(
             )
             scene_cut = continuity_cost >= _ROLE_DISCONTINUITY
         if scene_cut:
-            track_roles = dict(seed_roles)
-            previous = {}
-            previous_time = {}
-        if role_filter is not None and source_frame.get("scene_cut"):
+            track_roles.clear()
+        if role_filter is not None and scene_cut:
             role_filter.reset()
 
         assigned: dict[int, dict[str, Any]] = {}
         used_people: set[int] = set()
-        for role_map in (seed_roles, track_roles):
-            for person_index, person in enumerate(source_people):
-                track_id = person.get("track_id")
-                if track_id is None or person_index in used_people:
-                    continue
-                role = role_map.get(int(track_id))
-                if role is None or role in assigned:
-                    continue
-                assigned[role] = person
-                used_people.add(person_index)
+        known_people = []
+        for person_index, person in enumerate(source_people):
+            track_id = person.get("track_id")
+            if track_id is None:
+                continue
+            role = track_roles.get(int(track_id))
+            if role is None:
+                continue
+            prior = previous.get(role)
+            known_people.append(
+                (
+                    role,
+                    track_id != (prior or {}).get("track_id"),
+                    _role_cost(person, role, dancer_count, prior, True),
+                    person_index,
+                    person,
+                )
+            )
+        for role, _, _, person_index, person in sorted(known_people):
+            if role in assigned:
+                continue
+            assigned[role] = person
+            used_people.add(person_index)
 
         candidates = [
             person for index, person in enumerate(source_people) if index not in used_people
@@ -392,9 +415,57 @@ def _role_timeline(
             if frame_time - previous_time.get(role, -math.inf) <= 1.0
         }
         matched, _ = _best_role_assignment(
-            candidates, roles, dancer_count, recent
+            candidates,
+            roles,
+            dancer_count,
+            recent,
+            spatial_only=scene_cut,
         )
         assigned.update(matched)
+
+        if not scene_cut and len(recent) >= 2 and len(assigned) >= 2:
+            spatial, _ = _best_role_assignment(
+                source_people,
+                list(range(dancer_count)),
+                dancer_count,
+                recent,
+                spatial_only=True,
+            )
+            changed = [
+                role
+                for role in assigned.keys() & spatial.keys() & recent.keys()
+                if assigned[role] is not spatial[role]
+            ]
+            if (
+                len(changed) >= 2
+                and assigned.keys() == spatial.keys()
+                and {id(person) for person in assigned.values()}
+                == {id(person) for person in spatial.values()}
+            ):
+                def center_x(person: dict[str, Any]) -> float:
+                    bbox = person["bbox"]
+                    return bbox[0] + bbox[2] / 2
+
+                assigned_travel = sum(
+                    abs(center_x(assigned[role]) - center_x(recent[role]))
+                    for role in changed
+                )
+                spatial_travel = sum(
+                    abs(center_x(spatial[role]) - center_x(recent[role]))
+                    for role in changed
+                )
+                abrupt = sum(
+                    abs(center_x(assigned[role]) - center_x(recent[role]))
+                    > _ROLE_JUMP_MARGIN
+                    + _ROLE_MAX_SPEED
+                    * max(0.0, frame_time - previous_time.get(role, frame_time))
+                    for role in changed
+                )
+                if (
+                    abrupt >= 2
+                    and assigned_travel - spatial_travel > _ROLE_JUMP_MARGIN
+                ):
+                    assigned = spatial
 
         people = []
         for role, source_person in sorted(assigned.items()):
@@ -1109,7 +1180,7 @@ def extract_song(
             "lead_dancer_index": lead_dancer_index,
             "dancer_track_ids": representative_track_ids,
             "dancers": dancers,
-            "role_assignment": "track_id_then_pose_position",
+            "role_assignment": "track_id_with_spatial_shuffle_guard",
             "depth_order_convention": "front_to_back",
             "depth_estimation": "bounding_box_area",
             "render_order_convention": "back_to_front",
