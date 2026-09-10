@@ -185,11 +185,18 @@ ones where they conflict.
   choreography timed to the generated audio rather than an assumed tempo.
   Solar Sidewalk and Velvet Voltage use the deterministic synth. Brassline
   Breakaway uses Scenario-hosted Meta MusicGen (`stereo-large`; generation job
-  and asset IDs, seed, and exact prompt live in its catalog provenance). Its 15
+  and asset IDs, seed, and exact prompt live in its catalog provenance). Its 45
   dance landings follow the measured 120.0107 BPM grid beginning at the detected
   0.18549-second beat phase. Leonardo Music v1 was attempted first but its API
   balance is separate from the web Essential plan's Fast Tokens and rejected
   the request as insufficient.
+- [x] Retempo all six bundled original choreographies to move two to four times
+  faster: easy songs land every two beats, medium songs alternate one- and
+  two-beat gaps, and high-energy Cosmic Afterburn lands every beat. Keep every
+  landing on each recording's exact beat phase, vary the sequences for the
+  song's genre and mood, and compare centered/body-scaled joint velocity and
+  acceleration with extracted dances so the coaches move at playable human
+  pacing rather than holding a pose for each four-beat bar.
 - [x] Make original-song coach figures follow human kinematics: keep their
   authored bone lengths fixed in an internal 3D model while allowing natural
   2D foreshortening, rotate each bone over its shortest 3D arc, keep cue landings

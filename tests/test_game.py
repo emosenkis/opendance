@@ -166,6 +166,68 @@ class GameCoreTest(unittest.TestCase):
         self.assertEqual(session.ui_players()[0]["combo"], 0)
         self.assertEqual(stars_for_accuracy(0.9), 5)
 
+    def test_original_choreography_lands_on_beats_at_gameplay_pacing(self):
+        expected = {
+            "neon_first_light": (48, {2.0}, 0.15, 0.45),
+            "pixel_heart_rush": (87, {1.0, 2.0}, 0.24, 1.35),
+            "cosmic_afterburn": (136, {1.0}, 0.40, 3.0),
+            "solar_sidewalk": (48, {2.0}, 0.15, 0.45),
+            "velvet_voltage": (84, {1.0, 2.0}, 0.24, 1.35),
+            "brassline_breakaway": (45, {1.0, 2.0}, 0.24, 1.35),
+        }
+        for song in load_catalog():
+            count, beat_gaps, minimum_speed, minimum_acceleration = expected[
+                song["id"]
+            ]
+            moves = song["moves"]
+            offset = float(song.get("beat_offset", 0))
+            beats = [
+                (float(move["time"]) - offset) * float(song["bpm"]) / 60
+                for move in moves
+            ]
+            self.assertEqual(len(moves), count)
+            self.assertTrue(all(abs(beat - round(beat)) < 2e-6 for beat in beats))
+            self.assertEqual(
+                {round(after - before, 5) for before, after in zip(beats, beats[1:])},
+                beat_gaps,
+            )
+            self.assertTrue(
+                all(
+                    first["name"] != second["name"]
+                    for first, second in zip(moves, moves[1:])
+                )
+            )
+
+            step = 0.1
+            poses = [
+                target_pose(song, index * step)
+                for index in range(int(float(song["duration"]) / step) + 1)
+            ]
+            velocities = [
+                tuple(
+                    ((after[0] - before[0]) / step, (after[1] - before[1]) / step)
+                    for before, after in zip(first, second)
+                )
+                for first, second in zip(poses, poses[1:])
+            ]
+            speed = sum(
+                math.sqrt(sum(x * x + y * y for x, y in velocity) / len(velocity))
+                for velocity in velocities
+            ) / len(velocities)
+            acceleration = sum(
+                math.sqrt(
+                    sum(
+                        ((after[0] - before[0]) / step) ** 2
+                        + ((after[1] - before[1]) / step) ** 2
+                        for before, after in zip(first, second)
+                    )
+                    / len(first)
+                )
+                for first, second in zip(velocities, velocities[1:])
+            ) / (len(velocities) - 1)
+            self.assertGreaterEqual(speed, minimum_speed, song["id"])
+            self.assertGreaterEqual(acceleration, minimum_acceleration, song["id"])
+
     def test_catalog_and_extracted_choreography(self):
         catalog = load_catalog()
         self.assertEqual(
@@ -182,16 +244,6 @@ class GameCoreTest(unittest.TestCase):
         for song in catalog:
             for move in song["moves"]:
                 self.assertEqual(len(named_pose(move["name"])), 17)
-        for song in catalog[-3:]:
-            beat_offset = float(song.get("beat_offset", 0))
-            for index, move in enumerate(song["moves"]):
-                self.assertAlmostEqual(
-                    (float(move["time"]) - beat_offset)
-                    * float(song["bpm"])
-                    / 60,
-                    index * 4,
-                    delta=0.0011,
-                )
         self.assertEqual(
             catalog[-1]["audio_provenance"]["model"], "model_meta-musicgen"
         )
