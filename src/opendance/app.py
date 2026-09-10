@@ -1355,6 +1355,7 @@ class Backend(QObject):
     def _finish_game(self) -> None:
         if self._screen == "results" or not self._session:
             return
+        self._session.finish()
         result = self._session.results()
         earned = (
             max(

@@ -70,6 +70,25 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertEqual(_interpolated_media_time(2.5, 10, 10.2, False), 2.5)
         self.assertAlmostEqual(_interpolated_media_time(2.5, 10, 10.2, True), 2.7)
 
+    def test_finishing_game_flushes_scoring_before_results(self):
+        backend = Backend.__new__(Backend)
+        backend._screen = "game"
+        backend._session = Mock()
+        backend._session.results.return_value = {"players": [], "team_stars": 0}
+        backend._points = 0
+        backend.settings = SimpleNamespace(value=lambda *_args: 0, setValue=Mock())
+        backend._catalog = [{"id": "test"}]
+        backend._song_index = 0
+        backend._play_stinger = Mock()
+        backend._coach_player = SimpleNamespace(stop=Mock())
+        backend._music_player = SimpleNamespace(stop=Mock())
+        backend.changed = SimpleNamespace(emit=Mock())
+
+        backend._finish_game()
+
+        backend._session.finish.assert_called_once_with()
+        backend._session.results.assert_called_once_with()
+
     def test_trimmed_media_seeks_and_reports_song_relative_time(self):
         coach = SimpleNamespace(setPosition=Mock(), play=Mock())
         music = SimpleNamespace(setPosition=Mock(), play=Mock())

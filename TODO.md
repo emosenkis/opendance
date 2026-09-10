@@ -112,7 +112,7 @@ ones where they conflict.
 - [x] Provide optional heads-up upcoming-move pose cues.
 - [x] Provide frequent per-player visual judgements, combos, points, 0–5 stars,
   earned currency, song unlocks, and celebratory effects.
-- [ ] Replace the extracted-video fallback's periodic single-frame pose-copy
+- [x] Replace the extracted-video fallback's periodic single-frame pose-copy
   scoring with the authored dance-move segments: capture each player's motion
   across the complete segment, judge once when that move ends, and keep scoring
   independent of starting location, camera position, and apparent body size.

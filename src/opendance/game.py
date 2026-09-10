@@ -1087,10 +1087,40 @@ class GameSession:
         # session code never mutates song data, so keep the nested data shared.
         self.song = dict(song)
         self.moves = sorted(self.song.get("moves", ()), key=lambda move: float(move["time"]))
+        choreography = self.song.get("choreography", {})
+        scoring = (
+            choreography.get("move_scoring")
+            if isinstance(choreography, Mapping)
+            else None
+        )
+        self._move_definitions = (
+            scoring.get("definitions", {})
+            if isinstance(scoring, Mapping)
+            and scoring.get("schema_version") == 1
+            and isinstance(scoring.get("definitions"), Mapping)
+            else {}
+        )
+        self._segments = []
+        if self._move_definitions and isinstance(scoring.get("segments"), Sequence):
+            for segment in scoring["segments"]:
+                try:
+                    start, end = float(segment["start"]), float(segment["end"])
+                    dancers = segment["dancers"]
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if (
+                    math.isfinite(start)
+                    and math.isfinite(end)
+                    and 0 <= start < end
+                    and isinstance(dancers, Sequence)
+                    and not isinstance(dancers, (str, bytes))
+                ):
+                    self._segments.append(dict(segment, start=start, end=end))
+            self._segments.sort(key=lambda segment: segment["start"])
         self._uses_extracted_timeline = not bool(self.moves)
-        if not self.moves:
+        if not self.moves and not self._segments:
             # ponytail: extracted video has no semantic moves; one-second pose
-            # cues are enough until beat/move segmentation earns its complexity.
+            # cues keep old packages playable until they are re-extracted.
             last_cue = -math.inf
             for cue_time, pose in _extracted_keyframes(self.song):
                 if cue_time - last_cue >= 1.0:
@@ -1098,7 +1128,7 @@ class GameSession:
                         {"time": cue_time, "name": "FOLLOW", "keypoints": pose}
                     )
                     last_cue = cue_time
-        if not self.moves:
+        if not self.moves and not self._segments:
             raise ValueError("song has no usable move or extracted-pose timeline")
         self.player_slots = PlayerSlots(max_players=max_players)
         self.scores = {index: PlayerScore(index) for index in range(max_players)}
@@ -1107,6 +1137,8 @@ class GameSession:
         self._assignment_signature: tuple[int, ...] = ()
         self._last_time: float | None = None
         self._next_move = 0
+        self._next_segment = 0
+        self._observations: dict[int, list[tuple[float, int, Pose]]] = {}
 
     @property
     def finished(self) -> bool:
@@ -1120,6 +1152,15 @@ class GameSession:
         self._assignment_signature = ()
         self._last_time = None
         self._next_move = 0
+        self._next_segment = 0
+        self._observations = {}
+
+    def finish(self) -> list[MoveFeedback]:
+        """Flush authored moves that end inside the playback latency window."""
+
+        if not self._segments:
+            return []
+        return self._update_segment_scoring(float(self.song["duration"]))
 
     def current_target(self, time_s: float, player_slot: int | None = None) -> Pose:
         dancer = self.dancer_assignments.get(player_slot) if player_slot is not None else None
@@ -1187,8 +1228,12 @@ class GameSession:
         for slot in self.player_slots.active_slots:
             if slot.joined_at != previous_joins[slot.index]:
                 self.scores[slot.index] = PlayerScore(slot.index)
+                self._observations.pop(slot.index, None)
                 self._assignment_signature = ()
         self._refresh_dancer_assignments(now)
+
+        if self._segments:
+            return self._update_segment_scoring(now)
 
         if self._last_time is None:
             # A session normally begins at zero.  On seek/start-in-progress, skip
@@ -1243,6 +1288,109 @@ class GameSession:
                         total_score=player_score.points,
                     )
                 )
+        self._last_time = now
+        return feedback
+
+    def _update_segment_scoring(self, now: float) -> list[MoveFeedback]:
+        ends = [segment["end"] for segment in self._segments]
+        if (self._last_time is None and now > 0.25) or (
+            self._last_time is not None and now < self._last_time - 0.25
+        ):
+            self._next_segment = bisect_right(ends, now)
+            self._observations.clear()
+            self._last_time = now
+            return []
+
+        if self._next_segment < len(self._segments):
+            segment = self._segments[self._next_segment]
+            if segment["start"] <= now <= self._segments[-1]["end"]:
+                for slot in self.player_slots.visible_slots:
+                    if slot.pose is None:
+                        continue
+                    history = self._observations.setdefault(slot.index, [])
+                    if not history or now > history[-1][0]:
+                        history.append(
+                            (
+                                now,
+                                self.dancer_assignments.get(slot.index, 0),
+                                slot.pose,
+                            )
+                        )
+
+        feedback: list[MoveFeedback] = []
+        while (
+            self._next_segment < len(self._segments)
+            and self._segments[self._next_segment]["end"] <= now
+        ):
+            move_index = self._next_segment
+            segment = self._segments[move_index]
+            for slot_index, history in self._observations.items():
+                dancer_index = self.dancer_assignments.get(slot_index)
+                samples = [
+                    sample
+                    for sample in history
+                    if segment["start"] <= sample[0] <= segment["end"]
+                    and sample[1] == dancer_index
+                ]
+                if (
+                    dancer_index is None
+                    or not samples
+                    or samples[0][0] > segment["start"] + 0.25
+                    or samples[-1][0] < segment["end"] - 0.25
+                    or any(
+                        after[0] - before[0] > 0.5
+                        for before, after in zip(samples, samples[1:])
+                    )
+                ):
+                    continue
+                dancer = next(
+                    (
+                        item
+                        for item in segment["dancers"]
+                        if isinstance(item, Mapping)
+                        and item.get("dancer_index") == dancer_index
+                    ),
+                    None,
+                )
+                definition = (
+                    self._move_definitions.get(dancer.get("definition"))
+                    if dancer
+                    else None
+                )
+                poses = definition.get("poses") if isinstance(definition, Mapping) else None
+                if not isinstance(poses, Sequence) or isinstance(poses, (str, bytes)):
+                    continue
+                try:
+                    similarity = move_similarity(
+                        [sample[2] for sample in samples], poses
+                    )
+                except (TypeError, ValueError):
+                    continue
+                player_score = self.scores[slot_index]
+                grade, points = player_score.record(similarity)
+                feedback.append(
+                    MoveFeedback(
+                        slot=slot_index,
+                        player_number=slot_index + 1,
+                        move_index=move_index,
+                        move_name=str(segment.get("name") or f"MOVE {move_index + 1}"),
+                        similarity=similarity,
+                        grade=grade,
+                        points=points,
+                        combo=player_score.combo,
+                        total_score=player_score.points,
+                    )
+                )
+            self._next_segment += 1
+
+        if self._next_segment < len(self._segments):
+            keep_from = self._segments[self._next_segment]["start"]
+            self._observations = {
+                slot: [sample for sample in history if sample[0] >= keep_from]
+                for slot, history in self._observations.items()
+            }
+        else:
+            self._observations.clear()
         self._last_time = now
         return feedback
 
