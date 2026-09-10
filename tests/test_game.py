@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -72,6 +73,51 @@ class GameCoreTest(unittest.TestCase):
         self.assertGreater(pose_similarity(transformed, target), 0.99)
         self.assertGreater(pose_similarity(mirrored, target), 0.99)
         self.assertLess(pose_similarity(named_pose("squat"), target), 0.8)
+
+    def test_authored_dance_interpolation_uses_projected_3d_limbs(self):
+        song = {
+            "moves": [
+                {"time": 0, "name": "ready"},
+                {"time": 2, "name": "clap"},
+                {"time": 4, "name": "star"},
+            ]
+        }
+        bones = (
+            (5, 7, 0.21), (7, 9, 0.21), (6, 8, 0.21), (8, 10, 0.21),
+            (11, 13, 0.245), (13, 15, 0.245),
+            (12, 14, 0.245), (14, 16, 0.245),
+        )
+        previous = None
+        projected_lengths = []
+        for step in range(81):
+            pose = target_pose(song, step / 20)
+            self.assertTrue(
+                all(math.isfinite(value) for point in pose for value in point)
+            )
+            self.assertTrue(
+                all(-0.02 <= value <= 1.02 for point in pose for value in point[:2])
+            )
+            for parent, child, expected in bones:
+                length = math.dist(pose[parent][:2], pose[child][:2])
+                self.assertLessEqual(length, expected + 1e-9)
+            projected_lengths.append(math.dist(pose[5][:2], pose[7][:2]))
+            if previous is not None:
+                self.assertLess(
+                    max(math.dist(a[:2], b[:2]) for a, b in zip(previous, pose)),
+                    0.06,
+                )
+            previous = pose
+        self.assertGreater(max(projected_lengths) - min(projected_lengths), 0.08)
+
+        explicit = [list(point) for point in named_pose("star")]
+        explicit[9][:2] = [0.5, 0.5]
+        explicit_song = {
+            "moves": [
+                {"time": 0, "pose": named_pose("ready")},
+                {"time": 1, "pose": explicit},
+            ]
+        }
+        self.assertEqual(target_pose(explicit_song, 1), tuple(map(tuple, explicit)))
 
     def test_players_leave_and_rejoin_their_slots(self):
         slots = PlayerSlots(max_players=2, leave_after=0.5, rebind_seconds=2.0)

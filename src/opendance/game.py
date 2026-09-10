@@ -46,6 +46,11 @@ _MOTION_BONES = (
     (5, 11), (6, 12), (11, 12),
     (11, 13), (13, 15), (12, 14), (14, 16),
 )
+_NAMED_LIMBS = (
+    (5, 7, 0.21), (7, 9, 0.21), (6, 8, 0.21), (8, 10, 0.21),
+    (11, 13, 0.245), (13, 15, 0.245),
+    (12, 14, 0.245), (14, 16, 0.245),
+)
 
 GRADE_THRESHOLDS = (
     ("PERFECT", 0.90, 1_000),
@@ -168,6 +173,22 @@ def _reflect_template(pose: Pose) -> Pose:
     return tuple(reflected)
 
 
+def _project_limb_pose(points: Sequence) -> Pose:
+    raw = _coerce_pose(points)
+    pose = list(raw)
+    for parent, child, length in _NAMED_LIMBS:
+        dx = raw[child][0] - raw[parent][0]
+        dy = raw[child][1] - raw[parent][1]
+        planar_length = math.hypot(dx, dy)
+        scale = min(1.0, length / planar_length) if planar_length else 0.0
+        pose[child] = (
+            pose[parent][0] + dx * scale,
+            pose[parent][1] + dy * scale,
+            raw[child][2],
+        )
+    return tuple(pose)
+
+
 def named_pose(name: str, phase: float = 0.0) -> Pose:
     """Generate a normalized COCO-17 pose for a named dance move.
 
@@ -273,13 +294,15 @@ def named_pose(name: str, phase: float = 0.0) -> Pose:
     # Public poses use the same screen-normalized 0..1 coordinate space as the
     # live vision and extraction pipelines.  Internal templates are centered at
     # zero simply because that makes authoring symmetric moves less error-prone.
-    return tuple(
-        (
-            max(0.02, min(0.98, float(x) + 0.5)),
-            max(0.02, min(0.98, float(y))),
-            float(c),
+    return _project_limb_pose(
+        tuple(
+            (
+                max(0.02, min(0.98, float(x) + 0.5)),
+                max(0.02, min(0.98, float(y))),
+                float(c),
+            )
+            for x, y, c in pose
         )
-        for x, y, c in pose
     )
 
 
@@ -296,6 +319,41 @@ def interpolate_pose(first: Sequence, second: Sequence, amount: float) -> Pose:
         )
         for (ax, ay, ac), (bx, by, bc) in zip(a, b)
     )
+
+
+def _interpolate_named_pose(first: Sequence, second: Sequence, amount: float) -> Pose:
+    """Rotate fixed 3D bones while retaining their projected 2D foreshortening."""
+
+    a, b = _coerce_pose(first), _coerce_pose(second)
+    t = max(0.0, min(1.0, float(amount)))
+    pose = list(interpolate_pose(a, b, t))
+    for parent, child, length in _NAMED_LIMBS:
+        vectors = []
+        for points in (a, b):
+            dx = points[child][0] - points[parent][0]
+            dy = points[child][1] - points[parent][1]
+            dz = math.sqrt(max(0.0, length * length - dx * dx - dy * dy))
+            vectors.append((dx / length, dy / length, dz / length))
+        cosine = max(-1.0, min(1.0, sum(x * y for x, y in zip(*vectors))))
+        angle = math.acos(cosine)
+        if angle < 1e-6:
+            vector = vectors[0]
+        else:
+            sine = math.sin(angle)
+            weights = (
+                math.sin((1.0 - t) * angle) / sine,
+                math.sin(t * angle) / sine,
+            )
+            vector = tuple(
+                sum(weight * value for weight, value in zip(weights, axis))
+                for axis in zip(*vectors)
+            )
+        pose[child] = (
+            pose[parent][0] + vector[0] * length,
+            pose[parent][1] + vector[1] * length,
+            pose[child][2],
+        )
+    return tuple(pose)
 
 
 _EXTRACTED_CACHE: dict[
@@ -485,7 +543,20 @@ def target_pose(
         progress = max(0.0, min(1.0, (float(time_s) - float(start["time"])) / span))
         # Smoothstep avoids robotic stops while preserving exact cue poses.
         blend = progress * progress * (3.0 - 2.0 * progress)
-        return interpolate_pose(_move_pose(start, progress), _move_pose(end, progress), blend)
+        if not any(
+            key in move
+            for move in (start, end)
+            for key in ("pose", "keypoints")
+        ):
+            pose = _interpolate_named_pose(_move_pose(start), _move_pose(end), blend)
+            bounce = 0.018 * math.sin(2.0 * math.pi * progress)
+            return tuple(
+                (x, y + (bounce if index >= 5 else 0.0), confidence)
+                for index, (x, y, confidence) in enumerate(pose)
+            )
+        return interpolate_pose(
+            _move_pose(start, progress), _move_pose(end, progress), blend
+        )
 
     keyframes = _extracted_keyframes(song, dancer_index)
     if not keyframes:

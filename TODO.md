@@ -168,6 +168,11 @@ ones where they conflict.
 
 ## Song tooling
 
+- [x] Make original-song coach figures follow human kinematics: keep their
+  authored bone lengths fixed in an internal 3D model while allowing natural
+  2D foreshortening, rotate each bone over its shortest 3D arc, keep cue landings
+  exact, and retain a whole-body beat bounce. Do not constrain camera pose
+  estimation or alter poses extracted from real dancers.
 - [x] Add a cross-platform local-song reprocessing script that detects the
   current move-scoring signature, rebuilds only stale derived artifacts from
   saved stable-role timelines, preserves all other package data, creates a
