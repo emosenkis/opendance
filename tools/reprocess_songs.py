@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh stale move-scoring artifacts from local extracted timelines."""
+"""Refresh stale extraction artifacts from local extracted timelines."""
 
 from __future__ import annotations
 
@@ -13,8 +13,11 @@ from opendance.extract import (
     MOVE_SCORING_FEATURE,
     MOVE_SCORING_PHASES,
     MOVE_SCORING_SCHEMA_VERSION,
+    ROLE_ASSIGNMENT_METHOD,
     _atomic_json,
     _build_move_scoring,
+    _record_tracks,
+    _role_timeline,
 )
 
 
@@ -32,7 +35,7 @@ def _manifests(paths: list[Path]) -> list[Path]:
     return sorted(set(item.resolve() for item in found))
 
 
-def _current(scoring: object) -> bool:
+def _current_scoring(scoring: object) -> bool:
     return isinstance(scoring, dict) and (
         scoring.get("schema_version") == MOVE_SCORING_SCHEMA_VERSION
         and scoring.get("feature") == MOVE_SCORING_FEATURE
@@ -47,7 +50,9 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
     choreography = song.get("choreography")
     if not isinstance(choreography, dict) or not choreography.get("timeline"):
         return False
-    if _current(choreography.get("move_scoring")):
+    roles_current = choreography.get("role_assignment") == ROLE_ASSIGNMENT_METHOD
+    scoring_current = _current_scoring(choreography.get("move_scoring"))
+    if roles_current and scoring_current:
         return False
 
     dancers = choreography.get("dancers") or choreography.get("dancer_track_ids")
@@ -56,9 +61,45 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
     if dry_run:
         return True
 
-    scoring = _build_move_scoring(choreography["timeline"], len(dancers))
-    if not _current(scoring):
+    timeline = choreography["timeline"]
+    refreshed_dancers = choreography.get("dancers")
+    lead_dancer_index = choreography.get("lead_dancer_index")
+    rerole = not roles_current and len(dancers) > 1
+    if rerole:
+        track_stats = {}
+        try:
+            for frame in timeline:
+                _record_tracks(track_stats, frame.get("people", []))
+            seeds = [
+                int(dancer["seed_track_id"])
+                for dancer in dancers
+                if isinstance(dancer, dict)
+                and dancer.get("seed_track_id") is not None
+                and int(dancer["seed_track_id"]) in track_stats
+            ]
+            timeline, refreshed_dancers, lead_dancer_index = _role_timeline(
+                timeline, len(dancers), seeds, track_stats, 0
+            )
+        except (KeyError, TypeError, ValueError, RuntimeError) as exc:
+            raise ValueError(
+                f"{path}: saved role timeline cannot be refreshed: {exc}"
+            ) from exc
+
+    scoring = _build_move_scoring(timeline, len(dancers))
+    if not _current_scoring(scoring):
         raise ValueError(f"{path}: saved timeline produced no usable dance moves")
+    if rerole:
+        representative_ids = [dancer["track_id"] for dancer in refreshed_dancers]
+        choreography.update(
+            {
+                "timeline": timeline,
+                "dancers": refreshed_dancers,
+                "dancer_track_ids": representative_ids,
+                "lead_dancer_index": lead_dancer_index,
+                "lead_track_id": representative_ids[lead_dancer_index],
+            }
+        )
+    choreography["role_assignment"] = ROLE_ASSIGNMENT_METHOD
     choreography["move_scoring"] = scoring
     backup = path.with_name(f"{path.name}.bak")
     if not backup.exists():
@@ -69,7 +110,7 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Refresh outdated move scoring in local extracted song packages."
+        description="Refresh outdated extraction artifacts in local song packages."
     )
     parser.add_argument("packages", nargs="*", type=Path)
     parser.add_argument("--dry-run", action="store_true")

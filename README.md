@@ -180,8 +180,8 @@ uv run opendance-extract dance.mp4 songs/my-song --copy-video \
 Use `--pose-backend rtmpose --rtmpose-mode lightweight` after syncing the
 `rtmpose` extra to extract through the alternate implementation.
 
-After a move-scoring format update, refresh every stale role-aware local package
-directly from its saved timeline (no video inference required):
+After a role-assignment or move-scoring update, refresh every stale role-aware
+local package directly from its saved timeline (no video inference required):
 
 ```console
 uv run python tools/reprocess_songs.py --dry-run

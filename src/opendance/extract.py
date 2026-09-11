@@ -37,6 +37,7 @@ _SCENE_CUT_DELTA = 0.12
 _ROLE_DISCONTINUITY = 0.72
 _ROLE_JUMP_MARGIN = 0.08
 _ROLE_MAX_SPEED = 0.8
+ROLE_ASSIGNMENT_METHOD = "track_id_with_spatial_shuffle_guard"
 MOVE_SCORING_SCHEMA_VERSION = 1
 MOVE_SCORING_FEATURE = "coco17-motion-v1"
 MOVE_SCORING_PHASES = 12
@@ -1180,7 +1181,7 @@ def extract_song(
             "lead_dancer_index": lead_dancer_index,
             "dancer_track_ids": representative_track_ids,
             "dancers": dancers,
-            "role_assignment": "track_id_with_spatial_shuffle_guard",
+            "role_assignment": ROLE_ASSIGNMENT_METHOD,
             "depth_order_convention": "front_to_back",
             "depth_estimation": "bounding_box_area",
             "render_order_convention": "back_to_front",

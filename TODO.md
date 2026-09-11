@@ -202,10 +202,14 @@ ones where they conflict.
   2D foreshortening, rotate each bone over its shortest 3D arc, keep cue landings
   exact, and retain a whole-body beat bounce. Do not constrain camera pose
   estimation or alter poses extracted from real dancers.
-- [x] Add a cross-platform local-song reprocessing script that detects the
-  current move-scoring signature, rebuilds only stale derived artifacts from
-  saved stable-role timelines, preserves all other package data, creates a
-  non-overwritten manifest backup, and supports a dry run.
+- [x] Add a cross-platform local-song reprocessing script that detects both the
+  current role-assignment method and move-scoring signature. Without repeating
+  video inference, reassign stale multi-dancer timelines through the newest
+  spatial shuffle guard, refresh dancer/lead metadata, then rebuild the
+  dependent scoring segments; leave already-current and legacy one-dancer role
+  data alone. Preserve every unrelated package field, create a non-overwritten
+  manifest backup, support package-specific paths, and support a dry run over
+  every local song.
 - [x] Backfill authored move segments into the five role-aware local song
   packages that predated move scoring, directly from their saved timelines;
   preserve every other manifest field and keep a recoverable backup while
