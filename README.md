@@ -154,6 +154,36 @@ downloading the multi-gigabyte GPU stack.
 
 ## Import choreography
 
+From the app, open **Settings → Add Song**, choose a local video or enter a URL,
+then review its title, artist, trims, hidden opening, dancer count, optional LRC
+lyrics, and whether to copy the video before extraction. Embedded media metadata
+is read with `ffprobe` when available or the bundled Qt media backend otherwise;
+file-name values remain editable fallbacks. Imports go to `OPENDANCE_LIBRARY`
+when set, or the per-user XDG data library
+(`$XDG_DATA_HOME/opendance/songs`, normally
+`~/.local/share/opendance/songs`; `%LOCALAPPDATA%\OpenDance\songs` on Windows).
+
+URL downloads are deliberately delegated to commands the user registers in
+`$XDG_CONFIG_HOME/opendance/config.toml` (normally
+`~/.config/opendance/config.toml`):
+
+```toml
+[[url_helpers]]
+domains = ["youtube.com", "youtu.be"]
+command = ["/home/me/.local/bin/download-dance-video"]
+
+[[url_helpers]]
+domains = ["videos.example.org"]
+command = ["/opt/my-tools/example-video-helper", "--best"]
+```
+
+OpenDance selects the most-specific exact or parent-domain match, runs the argv
+directly without a shell, sets the requested URL in the helper's `URL`
+environment variable, and expects exactly one non-empty stdout line containing
+the downloaded file path. Helpers are trusted local programs; they should send
+diagnostics to stderr, exit nonzero on failure, and only download media the user
+is entitled to use.
+
 The offline extractor uses the exact pose/tracking implementation used during
 play. It defaults to one likely lead dancer; `--dancers` retains up to four
 stable choreography roles and records back-to-front rendering order:
@@ -165,7 +195,8 @@ uv run opendance-extract dance.mp4 songs/my-song \
 
 Add synchronized lyrics with `--lrc lyrics.lrc`. The result is a portable
 `songs/my-song/song.json`; OpenDance discovers one-level song packages under
-`./songs`, or under the directory named by `OPENDANCE_LIBRARY`.
+`./songs`, its per-user import library, or the directory named by
+`OPENDANCE_LIBRARY`.
 
 Useful options:
 

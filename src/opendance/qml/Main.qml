@@ -133,8 +133,20 @@ ApplicationWindow {
         backend.selectSong(songList.currentIndex)
     }
 
+    function syncSongSelection() {
+        var index = Number(backend.selectedSongIndex)
+        if (songList.count > 0 && index >= 0 && index < songList.count
+                && songList.currentIndex !== index) {
+            songList.currentIndex = index
+            songList.positionViewAtIndex(index, ListView.Contain)
+        }
+    }
+
     function goBack() {
-        if (screenName === "play") {
+        if (songImportDialog.visible) {
+            if (!songImportDialog.busy)
+                songImportDialog.close()
+        } else if (screenName === "play") {
             if (backend.presentationMode)
                 backend.leaveGame()
             else
@@ -199,6 +211,10 @@ ApplicationWindow {
                 window.showNormal()
             else
                 window.showFullScreen()
+        }
+
+        function onChanged() {
+            Qt.callLater(window.syncSongSelection)
         }
     }
 
@@ -2023,6 +2039,13 @@ ApplicationWindow {
                             font.pixelSize: 11 * window.uiScale
                         }
                     }
+
+                    NeonButton {
+                        text: "ADD SONG"
+                        compact: true
+                        accent: "#ff4fcb"
+                        onClicked: songImportDialog.begin()
+                    }
                 }
 
                 RowLayout {
@@ -2240,6 +2263,12 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    SongImportDialog {
+        id: songImportDialog
+        appBackend: backend
+        uiScale: window.uiScale
     }
 
     // One capture sink, visually re-parented between setup and the in-song mini

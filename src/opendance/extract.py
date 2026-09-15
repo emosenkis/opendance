@@ -16,7 +16,7 @@ from bisect import bisect_right
 from itertools import combinations, permutations
 from pathlib import Path
 from statistics import median
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from .game import (
     _coerce_pose,
@@ -831,6 +831,8 @@ def analyze_video(
     skip_before_s: float = 0.0,
     trim_end_s: float = 0.0,
     show_progress: bool = True,
+    progress_callback: Callable[[int, int | None, float], None] | None = None,
+    cancel_event: Any | None = None,
 ) -> dict[str, Any]:
     """Run ``engine`` on every decoded frame and retain the video's timestamps."""
 
@@ -862,6 +864,11 @@ def analyze_video(
         if reported_frames and fps and trim_end_ms
         else None
     )
+    expected_frames = (
+        min(reported_frames, max(1, math.ceil(stop_before_ms * fps / 1_000.0)))
+        if reported_frames and fps and stop_before_ms is not None
+        else reported_frames
+    )
     if stop_before_ms is not None and stop_before_ms <= skip_before_ms:
         capture.release()
         raise ValueError("requested trim and hidden intro leave no choreography frames")
@@ -873,9 +880,13 @@ def analyze_video(
     source_size = {"width": 0, "height": 0}
     started = time.perf_counter()
     last_progress = started
+    if progress_callback:
+        progress_callback(0, expected_frames, 0.0)
     try:
         engine.reset_tracking()
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("song extraction cancelled")
             ok, frame = capture.read()
             if not ok:
                 break
@@ -918,18 +929,25 @@ def analyze_video(
             )
 
             now = time.perf_counter()
-            interval = 0.5 if sys.stderr.isatty() else 5.0
-            if show_progress and now - last_progress >= interval:
+            interval = 0.25 if progress_callback else 0.5 if sys.stderr.isatty() else 5.0
+            if (show_progress or progress_callback) and now - last_progress >= interval:
                 elapsed = max(now - started, 1e-9)
-                progress = f"{len(timeline)} frames ({len(timeline) / elapsed:.1f} fps)"
-                if reported_frames:
-                    progress += f" / {reported_frames} ({decoded_frames / reported_frames:.1%})"
-                print(
-                    progress,
-                    file=sys.stderr,
-                    end="\r" if sys.stderr.isatty() else "\n",
-                    flush=True,
-                )
+                if progress_callback:
+                    progress_callback(
+                        min(decoded_frames, expected_frames or decoded_frames),
+                        expected_frames,
+                        decoded_frames / elapsed,
+                    )
+                if show_progress:
+                    progress = f"{len(timeline)} frames ({len(timeline) / elapsed:.1f} fps)"
+                    if expected_frames:
+                        progress += f" / {expected_frames} ({decoded_frames / expected_frames:.1%})"
+                    print(
+                        progress,
+                        file=sys.stderr,
+                        end="\r" if sys.stderr.isatty() else "\n",
+                        flush=True,
+                    )
                 last_progress = now
     finally:
         capture.release()
@@ -957,6 +975,12 @@ def analyze_video(
     for frame in timeline:
         _record_tracks(track_stats, frame["people"])
     elapsed = time.perf_counter() - started
+    if progress_callback:
+        progress_callback(
+            expected_frames or decoded_frames,
+            expected_frames,
+            decoded_frames / max(elapsed, 1e-9),
+        )
     return {
         "source": {
             "path": str(video_path.resolve()),
@@ -1031,6 +1055,8 @@ def extract_song(
     hide_video_intro: float = 0.0,
     force: bool = False,
     show_progress: bool = True,
+    progress_callback: Callable[[int, int | None, float], None] | None = None,
+    cancel_event: Any | None = None,
 ) -> Path:
     """Analyze a video and atomically create ``OUTPUT_DIR/song.json``."""
 
@@ -1093,6 +1119,8 @@ def extract_song(
         skip_before_s=trim_start + hide_video_intro,
         trim_end_s=trim_end,
         show_progress=show_progress,
+        progress_callback=progress_callback,
+        cancel_event=cancel_event,
     )
     source_duration = float(analysis["source"]["duration_ms"]) / 1_000.0
     duration = source_duration - trim_start - trim_end

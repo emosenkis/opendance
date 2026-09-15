@@ -44,6 +44,13 @@ from .game import (
     target_pose,
     target_poses,
 )
+from .importer import (
+    ImportOptions,
+    download_url,
+    extract_imported_song,
+    library_path,
+    probe_video_metadata,
+)
 from .vision import GestureController
 
 
@@ -315,8 +322,13 @@ class Backend(QObject):
     gamepadAction = Signal(str)
     fullscreenRequested = Signal()
     quitRequested = Signal()
+    songImportChanged = Signal()
     _vision_result = Signal(object)
     _vision_status = Signal(str)
+    _import_prepared = Signal(object)
+    _import_completed = Signal(str)
+    _import_failed = Signal(str)
+    _import_progress = Signal(object)
 
     def __init__(
         self,
@@ -455,9 +467,20 @@ class Backend(QObject):
         )
         self._last_frame_ms = 0.0
         self._pose_thread: PoseThread | None = None
+        self._song_import: dict[str, Any] = {}
+        self._song_import_busy = False
+        self._song_import_status = ""
+        self._song_import_progress = -1.0
+        self._song_import_worker: threading.Thread | None = None
+        self._song_import_cancel = threading.Event()
+        self._import_capture_paused = False
 
         self._vision_result.connect(self._on_pose_result)
         self._vision_status.connect(self._set_model_status)
+        self._import_prepared.connect(self._on_import_prepared)
+        self._import_completed.connect(self._on_import_completed)
+        self._import_failed.connect(self._on_import_failed)
+        self._import_progress.connect(self._on_import_progress)
         self._source_player.errorOccurred.connect(
             lambda _error, message: self._set_model_status(f"Video source error: {message}")
         )
@@ -489,9 +512,7 @@ class Backend(QObject):
         catalog = load_catalog(package_root.joinpath("content/songs.json"))
         for song in catalog:
             song["_root"] = str(package_root)
-        roots = [Path.cwd() / "songs"]
-        if extra := os.environ.get("OPENDANCE_LIBRARY"):
-            roots.insert(0, Path(extra).expanduser())
+        roots = dict.fromkeys((library_path().resolve(), (Path.cwd() / "songs").resolve()))
         for root in roots:
             for manifest in root.glob("*/song.json") if root.is_dir() else ():
                 try:
@@ -556,6 +577,10 @@ class Backend(QObject):
         return self._song_for_ui(self._catalog[self._song_index])
 
     @Property(int, notify=changed)
+    def selectedSongIndex(self) -> int:
+        return self._song_index
+
+    @Property(int, notify=changed)
     def points(self) -> int:
         return self._points
 
@@ -566,6 +591,22 @@ class Backend(QObject):
     @Property(str, notify=changed)
     def selectedSource(self) -> str:
         return self._selected_source
+
+    @Property("QVariantMap", notify=songImportChanged)
+    def songImport(self) -> dict[str, Any]:
+        return dict(self._song_import)
+
+    @Property(bool, notify=songImportChanged)
+    def songImportBusy(self) -> bool:
+        return self._song_import_busy
+
+    @Property(str, notify=songImportChanged)
+    def songImportStatus(self) -> str:
+        return self._song_import_status
+
+    @Property(float, notify=songImportChanged)
+    def songImportProgress(self) -> float:
+        return self._song_import_progress
 
     @Property(bool, constant=True)
     def alternateSourcesEnabled(self) -> bool:
@@ -812,6 +853,227 @@ class Backend(QObject):
             return
         self._screen = self._settings_return_screen
         self.changed.emit()
+
+    def _begin_song_import_source(self, source: str, *, remote: bool = False) -> None:
+        if self._song_import_busy:
+            return
+        self._song_import = {}
+        self._song_import_busy = True
+        self._song_import_progress = -1.0
+        self._song_import_cancel.clear()
+        self._song_import_status = (
+            "Downloading video…" if remote else "Reading video metadata…"
+        )
+        self.songImportChanged.emit()
+
+        def prepare() -> None:
+            try:
+                path = (
+                    download_url(source, cancel_event=self._song_import_cancel)
+                    if remote
+                    else Path(source).resolve(strict=True)
+                )
+                if not path.is_file():
+                    raise ValueError(f"video file does not exist: {path}")
+                details = probe_video_metadata(path)
+                if not self._song_import_cancel.is_set():
+                    self._import_prepared.emit({"source": str(path), **details})
+            except Exception as exc:
+                if not self._song_import_cancel.is_set():
+                    self._import_failed.emit(str(exc))
+
+        self._song_import_worker = threading.Thread(
+            target=prepare, name="song-import-prepare", daemon=True
+        )
+        self._song_import_worker.start()
+
+    @Slot()
+    def chooseSongImportFile(self) -> None:
+        if self._song_import_busy:
+            return
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            None,
+            "Add dance video",
+            "",
+            "Videos (*.mp4 *.mkv *.mov *.webm *.avi *.ogv);;All files (*)",
+        )
+        if path:
+            self._begin_song_import_source(path)
+
+    @Slot(str)
+    def prepareSongImportUrl(self, url: str) -> None:
+        if url.strip():
+            self._begin_song_import_source(url.strip(), remote=True)
+
+    @Slot()
+    def chooseSongImportLyrics(self) -> None:
+        if self._song_import_busy or not self._song_import.get("source"):
+            return
+        from PySide6.QtWidgets import QFileDialog
+
+        path, _ = QFileDialog.getOpenFileName(
+            None, "Add synchronized lyrics", "", "LRC lyrics (*.lrc);;All files (*)"
+        )
+        if path:
+            self._song_import["lyrics"] = str(Path(path).resolve())
+            self.songImportChanged.emit()
+
+    @Slot()
+    def resetSongImport(self) -> None:
+        if self._song_import_busy:
+            return
+        self._song_import = {}
+        self._song_import_status = ""
+        self._song_import_progress = -1.0
+        self.songImportChanged.emit()
+
+    @Slot("QVariantMap")
+    def startSongImport(self, values: dict[str, Any]) -> None:
+        source = self._song_import.get("source")
+        if self._song_import_busy or not source:
+            return
+        try:
+            copy_video = values.get("copy_video", True)
+            if not isinstance(copy_video, bool):
+                raise ValueError("copy video must be true or false")
+            options = ImportOptions(
+                title=str(values.get("title", "")).strip(),
+                artist=str(values.get("artist", "")).strip(),
+                dancer_count=int(values.get("dancer_count", 1)),
+                trim_start=float(values.get("trim_start", 0)),
+                trim_end=float(values.get("trim_end", 0)),
+                hide_video_intro=float(values.get("hide_video_intro", 0)),
+                copy_video=copy_video,
+                lrc=self._song_import.get("lyrics"),
+            )
+        except (TypeError, ValueError) as exc:
+            self._song_import_status = f"Error: invalid extraction options ({exc})"
+            self.songImportChanged.emit()
+            return
+
+        self._song_import.update(title=options.title, artist=options.artist)
+        pose_thread = self._pose_thread
+        self._pose_thread = None
+        if pose_thread:
+            pose_thread.close()
+        self._stop_source()
+        self._import_capture_paused = True
+        self._song_import_busy = True
+        self._song_import_progress = -1.0
+        self._song_import_cancel.clear()
+        self._song_import_status = "Extracting choreography… This can take several minutes."
+        self.songImportChanged.emit()
+        metadata = dict(self._song_import)
+
+        def extract() -> None:
+            try:
+                if pose_thread:
+                    pose_thread.join()
+                engine = pose_thread.engine if pose_thread else None
+                if engine is None:
+                    from .vision import create_pose_engine
+
+                    engine = create_pose_engine(
+                        self._pose_backend,
+                        rtmpose_mode=self._rtmpose_mode,
+                        max_people=self._max_players,
+                    )
+                manifest = extract_imported_song(
+                    source,
+                    library_path(),
+                    engine=engine,
+                    options=options,
+                    metadata=metadata,
+                    progress_callback=lambda done, total, fps: self._import_progress.emit(
+                        (done, total, fps)
+                    ),
+                    cancel_event=self._song_import_cancel,
+                    existing_ids={str(song.get("id", "")) for song in self._catalog},
+                )
+                if not self._song_import_cancel.is_set():
+                    self._import_completed.emit(str(manifest))
+            except Exception as exc:
+                if not self._song_import_cancel.is_set():
+                    self._import_failed.emit(str(exc))
+
+        self._song_import_worker = threading.Thread(
+            target=extract, name="song-import-extract", daemon=True
+        )
+        self._song_import_worker.start()
+
+    @Slot(object)
+    def _on_import_prepared(self, details: dict[str, Any]) -> None:
+        self._song_import = dict(details)
+        self._song_import_busy = False
+        self._song_import_progress = -1.0
+        self._song_import_status = "Ready to extract choreography."
+        self.songImportChanged.emit()
+
+    @Slot(object)
+    def _on_import_progress(self, progress: tuple[int, int | None, float]) -> None:
+        done, total, fps = progress
+        if total:
+            self._song_import_progress = min(1.0, done / total)
+            if done >= total:
+                self._song_import_status = "Building stable dancer roles and dance moves…"
+            else:
+                remaining = max(0.0, (total - done) / fps) if fps > 0 else 0.0
+                eta = (
+                    f"about {math.ceil(remaining / 60)} min left"
+                    if remaining >= 90
+                    else f"about {math.ceil(remaining)} sec left"
+                    if remaining > 0
+                    else "estimating time left"
+                )
+                self._song_import_status = (
+                    f"Analyzing video: {self._song_import_progress:.0%} · "
+                    f"{done:,}/{total:,} frames · {fps:.1f} fps · {eta}"
+                )
+        else:
+            self._song_import_progress = -1.0
+            self._song_import_status = (
+                f"Analyzing video: {done:,} frames"
+                + (f" · {fps:.1f} fps" if fps > 0 else "")
+            )
+        self.songImportChanged.emit()
+
+    def _resume_after_song_import(self) -> None:
+        if self._import_capture_paused:
+            self._import_capture_paused = False
+            self._apply_source()
+
+    @Slot(str)
+    def _on_import_completed(self, manifest: str) -> None:
+        destination = Path(manifest).resolve()
+        title = str(self._song_import.get("title") or destination.parent.name)
+        self._catalog = self._load_songs()
+        self._song_index = next(
+            (
+                index
+                for index, song in enumerate(self._catalog)
+                if Path(str(song.get("_manifest", ""))).resolve() == destination
+            ),
+            self._song_index,
+        )
+        self._loaded_song_index = -1
+        self._loaded_song = None
+        self._song_import = {}
+        self._song_import_busy = False
+        self._song_import_progress = -1.0
+        self._song_import_status = f"Added {title} to the song library."
+        self._resume_after_song_import()
+        self.songImportChanged.emit()
+        self.changed.emit()
+
+    @Slot(str)
+    def _on_import_failed(self, message: str) -> None:
+        self._song_import_busy = False
+        self._song_import_progress = -1.0
+        self._song_import_status = f"Error: {message}"
+        self._resume_after_song_import()
+        self.songImportChanged.emit()
 
     @Slot(QObject)
     def attachVideoSink(self, sink: QObject) -> None:
@@ -1432,6 +1694,10 @@ class Backend(QObject):
         self.changed.emit()
 
     def close(self) -> None:
+        self._song_import_cancel.set()
+        if self._song_import_worker and self._song_import_worker.is_alive():
+            self._song_import_worker.join(timeout=2.0)
+        self._import_capture_paused = False
         self._ticker.stop()
         self._stop_source()
         self._coach_player.stop()

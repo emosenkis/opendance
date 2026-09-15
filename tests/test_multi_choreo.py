@@ -2,6 +2,7 @@ import gc
 import json
 from pathlib import Path
 import sys
+import threading
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
@@ -434,6 +435,7 @@ class MultiDancerTest(unittest.TestCase):
                 }
 
         engine = Engine()
+        progress = []
         with TemporaryDirectory() as directory:
             video = Path(directory) / "video.mp4"
             video.touch()
@@ -444,12 +446,32 @@ class MultiDancerTest(unittest.TestCase):
                     skip_before_s=3,
                     trim_end_s=2,
                     show_progress=False,
+                    progress_callback=lambda *values: progress.append(values),
                 )
 
         self.assertEqual([frame for frame, _time in engine.calls], list(range(3, 8)))
         self.assertEqual(result["frames"][0]["timestamp_ms"], 3_000)
         self.assertEqual(result["source"]["duration_ms"], 10_000)
         self.assertEqual(result["source"]["analyzed_frame_count"], 5)
+        self.assertEqual(progress[0][:2], (0, 8))
+        self.assertEqual(progress[-1][:2], (8, 8))
+        self.assertGreater(progress[-1][2], 0)
+
+        capture = Capture()
+        cancelled = threading.Event()
+        cancelled.set()
+        with TemporaryDirectory() as directory:
+            video = Path(directory) / "video.mp4"
+            video.touch()
+            with patch.dict(sys.modules, {"cv2": fake_cv2}), self.assertRaisesRegex(
+                InterruptedError, "cancelled"
+            ):
+                analyze_video(
+                    video,
+                    engine,
+                    show_progress=False,
+                    cancel_event=cancelled,
+                )
 
     def test_extractor_retimes_trimmed_media_lyrics_and_hidden_intro(self):
         analysis = {
@@ -509,6 +531,8 @@ class MultiDancerTest(unittest.TestCase):
             skip_before_s=3.0,
             trim_end_s=2.0,
             show_progress=False,
+            progress_callback=None,
+            cancel_event=None,
         )
         self.assertEqual(song["duration"], 6)
         self.assertEqual(song["media_start"], 2)

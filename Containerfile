@@ -25,7 +25,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     OPENDANCE_MODEL=/app/models/yolo26n-pose.pt \
     QT_MEDIA_BACKEND=ffmpeg \
     XDG_CACHE_HOME=/data/cache \
-    XDG_CONFIG_HOME=/data/config
+    XDG_CONFIG_HOME=/data/config \
+    XDG_DATA_HOME=/data/share
 RUN opendance-extract --diagnostics
 VOLUME ["/data"]
 LABEL org.opencontainers.image.licenses="AGPL-3.0-only"

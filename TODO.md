@@ -178,6 +178,22 @@ ones where they conflict.
 
 ## Song tooling
 
+- [x] Integrate song importing into Settings: choose a local video or supported
+  URL, automatically prefill embedded/file-name title, artist, and duration,
+  then review/edit the useful extraction choices before work begins. Expose
+  title, artist, start/end trim, hidden opening video, 1–6 authored dancers,
+  portable video copying, and optional LRC lyrics while keeping model, device,
+  image-size, smoothing, raw-track, ID, CLI-progress, and overwrite controls out of
+  the end-user flow. Run download/metadata/extraction work off the UI thread,
+  reuse the loaded pose engine when possible, show analyzed/total frames,
+  percentage, processing FPS, ETA, and the final role/move-building phase, then
+  refresh and visibly select the new song.
+- [x] Support opt-in domain-scoped URL download helpers from
+  `$XDG_CONFIG_HOME/opendance/config.toml`: choose the most-specific exact or
+  parent-domain match for HTTP(S), execute a configured argv directly without a
+  shell, provide the requested address as `URL`, and accept exactly one existing
+  downloaded-file path on stdout. Surface malformed config, unsafe URLs,
+  process failures, timeouts, and invalid output in the import dialog.
 - [x] Add three original, playable songs with deliberate dances whose move
   landings follow the actual beat grid. Two tracks may use the repository's
   sample-free deterministic synth; at least one must use a real generative-music
