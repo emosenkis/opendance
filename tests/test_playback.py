@@ -303,6 +303,21 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertNotIn("moves", visible)
         self.assertNotIn("lyrics", visible)
 
+    def test_dancer_marker_is_one_feathered_slowly_settling_rectangle(self):
+        qml = files("opendance.qml").joinpath("Main.qml").read_text(encoding="utf-8")
+        marker = qml.split("id: dancerAssignmentMarkers", 1)[1].split(
+            "StackLayout {", 1
+        )[0]
+
+        self.assertEqual(marker.count("Canvas {"), 1)
+        self.assertNotIn("Rectangle {", marker)
+        self.assertNotIn("SmoothedAnimation", marker)
+        self.assertIn("for (var spread = 10; spread >= 0; --spread)", marker)
+        self.assertIn(">= 4 * window.uiScale", marker)
+        self.assertIn(">= 7 * window.uiScale", marker)
+        self.assertIn("> 30 * window.uiScale ? 700 : 10000", marker)
+        self.assertIn("> 24 * window.uiScale ? 850 : 12000", marker)
+
     def test_library_reads_metadata_before_dense_choreography(self):
         with TemporaryDirectory() as directory:
             manifest = Path(directory) / "song.json"

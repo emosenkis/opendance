@@ -451,58 +451,92 @@ ApplicationWindow {
             model: dancerAssignmentMarkers.dancers.length
 
             Item {
+                id: marker
                 required property int index
                 readonly property var modelData: dancerAssignmentMarkers.dancer(index)
                 readonly property var box: modelData.bbox || []
                 readonly property int dancerIndex: index
                 readonly property color dancerColor: window.playerColor(dancerIndex)
-                readonly property color cloudColor: Qt.rgba(dancerColor.r, dancerColor.g,
-                                                              dancerColor.b, 0.38)
+                readonly property color indicatorColor: Qt.rgba(dancerColor.r,
+                                                                  dancerColor.g,
+                                                                  dancerColor.b, 0.48)
+                readonly property real targetX: box.length < 4 ? 0 : Math.max(
+                    0, Math.min(dancerAssignmentMarkers.width - width,
+                                (Number(box[0]) + Number(box[2]) / 2)
+                                * dancerAssignmentMarkers.width - width / 2))
+                readonly property real targetY: box.length < 4 ? 0 : Math.max(
+                    0, Math.min(dancerAssignmentMarkers.height - height,
+                                (Number(box[1]) + Number(box[3]))
+                                * dancerAssignmentMarkers.height + 4 * window.uiScale))
+                property real filteredX: 0
+                property real filteredY: 0
+                property bool positioned: false
                 visible: box.length >= 4
-                x: Math.max(0, Math.min(dancerAssignmentMarkers.width - width,
-                                       (Number(box[0]) + Number(box[2]) / 2)
-                                       * dancerAssignmentMarkers.width - width / 2))
-                y: Math.max(0, Math.min(dancerAssignmentMarkers.height - height,
-                                       (Number(box[1]) + Number(box[3]))
-                                       * dancerAssignmentMarkers.height + 4 * window.uiScale))
-                width: 72 * window.uiScale
-                height: 24 * window.uiScale
+                x: filteredX
+                y: filteredY
+                width: 96 * window.uiScale
+                height: 38 * window.uiScale
+
+                Component.onCompleted: {
+                    filteredX = targetX
+                    filteredY = targetY
+                    positioned = true
+                }
+                onTargetXChanged: if (positioned
+                                      && Math.abs(targetX - filteredX)
+                                         >= 4 * window.uiScale)
+                                      filteredX = targetX
+                onTargetYChanged: if (positioned
+                                      && Math.abs(targetY - filteredY)
+                                         >= 7 * window.uiScale)
+                                      filteredY = targetY
 
                 Behavior on x {
-                    SmoothedAnimation { duration: 550; velocity: 1000 * window.uiScale }
+                    enabled: marker.positioned
+                    NumberAnimation {
+                        duration: Math.abs(marker.filteredX - marker.x)
+                                  > 30 * window.uiScale ? 700 : 10000
+                        easing.type: Easing.OutCubic
+                    }
                 }
 
                 Behavior on y {
-                    SmoothedAnimation { duration: 650; velocity: 1000 * window.uiScale }
+                    enabled: marker.positioned
+                    NumberAnimation {
+                        duration: Math.abs(marker.filteredY - marker.y)
+                                  > 24 * window.uiScale ? 850 : 12000
+                        easing.type: Easing.OutCubic
+                    }
                 }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 15 * window.uiScale
-                    radius: height / 2
-                    color: parent.cloudColor
-                    border.width: 1
-                    border.color: Qt.rgba(parent.dancerColor.r, parent.dancerColor.g,
-                                          parent.dancerColor.b, 0.72)
-                }
+                Canvas {
+                    id: assignmentIndicator
+                    anchors.fill: parent
+                    antialiasing: true
 
-                Rectangle {
-                    x: 12 * window.uiScale
-                    y: 4 * window.uiScale
-                    width: 24 * window.uiScale
-                    height: 17 * window.uiScale
-                    radius: height / 2
-                    color: parent.cloudColor
-                }
+                    onPaint: {
+                        var context = getContext("2d")
+                        var scale = window.uiScale
+                        var color = marker.indicatorColor
+                        context.reset()
+                        context.clearRect(0, 0, width, height)
+                        context.fillStyle = Qt.rgba(color.r, color.g, color.b,
+                                                    color.a / 12)
+                        for (var spread = 10; spread >= 0; --spread) {
+                            var feather = spread * scale
+                            var radius = (3 + spread * 0.55) * scale
+                            context.beginPath()
+                            context.roundedRect(12 * scale - feather,
+                                                12 * scale - feather,
+                                                72 * scale + 2 * feather,
+                                                14 * scale + 2 * feather,
+                                                radius, radius)
+                            context.fill()
+                        }
+                    }
 
-                Rectangle {
-                    x: 34 * window.uiScale
-                    width: 25 * window.uiScale
-                    height: 20 * window.uiScale
-                    radius: height / 2
-                    color: parent.cloudColor
+                    onWidthChanged: requestPaint()
+                    onHeightChanged: requestPaint()
                 }
 
                 Label {
