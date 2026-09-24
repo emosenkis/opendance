@@ -2179,51 +2179,6 @@ ApplicationWindow {
                                 }
                             }
 
-                            Label {
-                                text: "CAMERA FRAMING"
-                                color: "#7cff9b"
-                                font.pixelSize: 12 * window.uiScale
-                                font.weight: Font.Black
-                                font.letterSpacing: 1.5
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                text: "This is your target full-body height in the camera frame. The setup preview tells each player to move forward or back."
-                                wrapMode: Text.WordWrap
-                                color: "#8f9bb1"
-                                font.pixelSize: 10 * window.uiScale
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-
-                                NeonButton {
-                                    text: "\u22125%"
-                                    compact: true
-                                    Layout.preferredWidth: 82 * window.uiScale
-                                    accent: "#7cff9b"
-                                    onClicked: window.setOption("framingHeight", backend.framingHeight - 0.05)
-                                }
-
-                                Label {
-                                    Layout.fillWidth: true
-                                    text: Math.round(Number(backend.framingHeight || 0.72) * 100) + "% OF FRAME"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    color: "#7cff9b"
-                                    font.pixelSize: 13 * window.uiScale
-                                    font.weight: Font.Black
-                                }
-
-                                NeonButton {
-                                    text: "+5%"
-                                    compact: true
-                                    Layout.preferredWidth: 82 * window.uiScale
-                                    accent: "#7cff9b"
-                                    onClicked: window.setOption("framingHeight", backend.framingHeight + 0.05)
-                                }
-                            }
-
                             Item { Layout.fillHeight: true }
                         }
                     }

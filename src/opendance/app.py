@@ -101,14 +101,6 @@ def song_manifest_metadata(path: str | os.PathLike[str]) -> dict[str, Any]:
     return metadata
 
 
-def _framing_height(value: Any) -> float:
-    try:
-        height = float(value)
-    except (TypeError, ValueError):
-        return 0.72
-    return max(0.5, min(0.9, height)) if math.isfinite(height) else 0.72
-
-
 def _song_seconds(song: dict[str, Any], key: str) -> float:
     try:
         value = float(song.get(key, 0.0))
@@ -143,7 +135,7 @@ def song_preview(song: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def framing_nudge(bbox: Any, target_height: float = 0.72) -> str:
+def framing_nudge(bbox: Any) -> str:
     """Return a camera-distance cue for one normalized ``x, y, w, h`` box."""
 
     try:
@@ -156,10 +148,9 @@ def framing_nudge(bbox: Any, target_height: float = 0.72) -> str:
         return ""
     if width <= 0 or height <= 0:
         return ""
-    target = _framing_height(target_height)
-    if top <= 0.01 or top + height >= 0.99 or height > target + 0.1:
+    if top <= 0.01 or top + height >= 0.99:
         return "MOVE BACK"
-    if height < target - 0.1:
+    if height < 0.25:
         return "MOVE FORWARD"
     return ""
 
@@ -447,9 +438,6 @@ class Backend(QObject):
         self._inference_fps = 0.0
         self._last_inference_at = 0.0
         self._latency_ms = int(self.settings.value("game/latency_ms", 80))
-        self._framing_height = _framing_height(
-            self.settings.value("camera/framing_height", 0.72)
-        )
         self._cues = self.settings.value("game/cues", True, type=bool)
         self._mini = False if self._presentation_mode else self.settings.value(
             "game/mini_view", True, type=bool
@@ -745,7 +733,7 @@ class Backend(QObject):
         )
         cues = []
         for index, person in enumerate(people):
-            label = framing_nudge(person.get("bbox"), self._framing_height)
+            label = framing_nudge(person.get("bbox"))
             if label:
                 track_id = person.get("track_id")
                 cues.append(
@@ -760,10 +748,6 @@ class Backend(QObject):
     @Property(int, notify=changed)
     def latencyMs(self) -> int:
         return self._latency_ms
-
-    @Property(float, notify=changed)
-    def framingHeight(self) -> float:
-        return self._framing_height
 
     @Property(bool, notify=changed)
     def joinGestureOnly(self) -> bool:
@@ -1355,9 +1339,6 @@ class Backend(QObject):
         elif name == "latencyMs":
             self._latency_ms = max(-300, min(500, int(value)))
             self.settings.setValue("game/latency_ms", self._latency_ms)
-        elif name == "framingHeight":
-            self._framing_height = _framing_height(value)
-            self.settings.setValue("camera/framing_height", self._framing_height)
         elif name == "joinGestureOnly":
             self._gestures.join_required = bool(value)
             self._gestures.reset()

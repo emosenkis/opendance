@@ -67,8 +67,9 @@ ones where they conflict.
   bindings at shot cuts and override IDs only when two or more roles would make
   physically implausible one-frame position jumps. Preserve identity through
   gradual on-screen crossings and front/behind changes.
-- [x] Show clear on-screen nudges to move forward or back, with a framing
-  calibration control.
+- [x] Keep camera framing automatic rather than user-configurable: tell players
+  to move back when their head or feet reach the frame edge, and forward only
+  when their detected body is less than 25% of the frame height.
 - [x] Research equally capable hands/feet and monocular 3D models without
   removing the verified 2D path; record quality, speed, depth, and licensing
   constraints in `docs/pose-models.md`.
@@ -166,8 +167,8 @@ ones where they conflict.
   false detections are not automatically added.
 - [x] Keep the camera pose loop available from the initial library for hands-free
   control, while throttling non-game inference.
-- [x] Move most or all setup options into a dedicated settings screen; explain
-  camera framing plainly or calibrate it automatically when reliable.
+- [x] Move setup options into a dedicated settings screen while keeping camera
+  framing out of settings and deriving its guidance directly from live poses.
 - [x] Keep the settings screen populated and navigation-tested at both supported
   window sizes; never route to a background-only/blank page.
 - [x] Play an interesting short audio/video preview inside the selected song

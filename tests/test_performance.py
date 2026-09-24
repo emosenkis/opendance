@@ -33,8 +33,11 @@ class PoseDiagnosticsTest(unittest.TestCase):
 
     def test_framing_nudges_validate_box_height_and_clipping(self):
         self.assertEqual(framing_nudge([0.2, 0.1, 0.4, 0.7]), "")
-        self.assertEqual(framing_nudge([0.2, 0.2, 0.3, 0.4]), "MOVE FORWARD")
+        self.assertEqual(framing_nudge([0.2, 0.2, 0.3, 0.24]), "MOVE FORWARD")
+        self.assertEqual(framing_nudge([0.2, 0.2, 0.3, 0.25]), "")
+        self.assertEqual(framing_nudge([0.2, 0.05, 0.5, 0.9]), "")
         self.assertEqual(framing_nudge([0.2, 0.0, 0.5, 0.72]), "MOVE BACK")
+        self.assertEqual(framing_nudge([0.2, 0.3, 0.5, 0.7]), "MOVE BACK")
         self.assertEqual(framing_nudge([0.2, 0.1, 0.4]), "")
 
     def test_reports_resolved_inference_device(self):
