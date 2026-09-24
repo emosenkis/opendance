@@ -23,6 +23,7 @@ _DOMAIN = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*"
 )
 URL_HELPER_TIMEOUT = 30 * 60
+DEFAULT_CONFIG_PATH = Path(__file__).with_name("content") / "default_config.toml"
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,8 @@ def library_path() -> Path:
 def _domain(value: Any) -> str:
     if not isinstance(value, str) or not value or value != value.strip():
         raise ValueError("URL helper domains must be non-empty strings")
+    if value == "*":
+        return value
     try:
         domain = value.rstrip(".").casefold().encode("idna").decode("ascii")
     except UnicodeError as exc:
@@ -76,35 +79,37 @@ def _domain(value: Any) -> str:
 def load_url_helpers(
     path: str | os.PathLike[str] | None = None,
 ) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
-    """Load ``[[url_helpers]]`` domain and argv entries from config TOML."""
+    """Load user and built-in ``[[url_helpers]]`` domain/argv entries."""
 
     source = Path(path) if path is not None else config_path()
-    try:
-        with source.open("rb") as stream:
-            payload = tomllib.load(stream)
-    except FileNotFoundError:
-        return []
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ValueError(f"could not read URL helper config {source}: {exc}") from exc
-    rows = payload.get("url_helpers", [])
-    if not isinstance(rows, list):
-        raise ValueError("config url_helpers must be an array of tables")
     helpers = []
-    for index, row in enumerate(rows, 1):
-        if not isinstance(row, dict):
-            raise ValueError(f"url_helpers entry {index} must be a table")
-        domains = row.get("domains")
-        command = row.get("command")
-        if not isinstance(domains, list) or not domains:
-            raise ValueError(f"url_helpers entry {index} domains must be a non-empty array")
-        if (
-            not isinstance(command, list)
-            or not command
-            or not all(isinstance(part, str) and "\0" not in part for part in command)
-            or not command[0]
-        ):
-            raise ValueError(f"url_helpers entry {index} command must be a non-empty argv array")
-        helpers.append((tuple(_domain(item) for item in domains), tuple(command)))
+    sources = (source,) if source == DEFAULT_CONFIG_PATH else (source, DEFAULT_CONFIG_PATH)
+    for current in sources:
+        try:
+            with current.open("rb") as stream:
+                payload = tomllib.load(stream)
+        except FileNotFoundError:
+            continue
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise ValueError(f"could not read URL helper config {current}: {exc}") from exc
+        rows = payload.get("url_helpers", [])
+        if not isinstance(rows, list):
+            raise ValueError("config url_helpers must be an array of tables")
+        for index, row in enumerate(rows, 1):
+            if not isinstance(row, dict):
+                raise ValueError(f"url_helpers entry {index} must be a table")
+            domains = row.get("domains")
+            command = row.get("command")
+            if not isinstance(domains, list) or not domains:
+                raise ValueError(f"url_helpers entry {index} domains must be a non-empty array")
+            if (
+                not isinstance(command, list)
+                or not command
+                or not all(isinstance(part, str) and "\0" not in part for part in command)
+                or not command[0]
+            ):
+                raise ValueError(f"url_helpers entry {index} command must be a non-empty argv array")
+            helpers.append((tuple(_domain(item) for item in domains), tuple(command)))
     return helpers
 
 
@@ -135,16 +140,25 @@ def _helper_command(
     host = _url_host(url)
     source = Path(path) if path is not None else config_path()
     matches = [
-        (len(domain), command)
+        (0 if domain == "*" else len(domain), command)
         for domains, command in load_url_helpers(source)
         for domain in domains
-        if host == domain or host.endswith(f".{domain}")
+        if domain == "*" or host == domain or host.endswith(f".{domain}")
     ]
     if not matches:
         raise ValueError(
             f"no download helper is configured for {host}; add one to {source}"
         )
-    return max(matches, key=lambda item: item[0])[1]
+    command = max(matches, key=lambda item: item[0])[1]
+    if "{DOWNLOAD_DIR}" in command:
+        download_dir = library_path() / ".downloads"
+        download_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        download_dir = Path()
+    return tuple(
+        url if part == "{URL}" else str(download_dir) if part == "{DOWNLOAD_DIR}" else part
+        for part in command
+    )
 
 
 def download_url(
@@ -440,6 +454,7 @@ def extract_imported_song(
 
 
 __all__ = (
+    "DEFAULT_CONFIG_PATH",
     "ImportOptions",
     "URL_HELPER_TIMEOUT",
     "config_path",

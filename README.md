@@ -163,7 +163,9 @@ when set, or the per-user XDG data library
 (`$XDG_DATA_HOME/opendance/songs`, normally
 `~/.local/share/opendance/songs`; `%LOCALAPPDATA%\OpenDance\songs` on Windows).
 
-URL downloads are deliberately delegated to commands the user registers in
+URL downloads use `yt-dlp` by default, with a catch-all entry that lets the
+installed yt-dlp version decide which sites it supports. Install `yt-dlp` on
+`PATH`, or override it for particular domains in
 `$XDG_CONFIG_HOME/opendance/config.toml` (normally
 `~/.config/opendance/config.toml`):
 
@@ -182,7 +184,9 @@ directly without a shell, sets the requested URL in the helper's `URL`
 environment variable, and expects exactly one non-empty stdout line containing
 the downloaded file path. Helpers are trusted local programs; they should send
 diagnostics to stderr, exit nonzero on failure, and only download media the user
-is entitled to use.
+is entitled to use. `{URL}` and `{DOWNLOAD_DIR}` command arguments expand to the
+requested URL and OpenDance's writable download directory; the built-in yt-dlp
+entry uses both while still exposing `URL` to every helper.
 
 The offline extractor uses the exact pose/tracking implementation used during
 play. It defaults to one likely lead dancer; `--dancers` retains up to four

@@ -58,6 +58,7 @@ where = ["src"]
 opendance = [
     "qml/**/*.qml",
     "content/*.json",
+    "content/*.toml",
     "assets/*.svg",
     "assets/audio/*.ogg",
     "assets/audio/stingers/*.ogg",

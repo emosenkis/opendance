@@ -1,0 +1,5 @@
+[[url_helpers]]
+# Let yt-dlp's current extractor set decide which sites are supported instead
+# of baking a domain list into OpenDance that immediately becomes stale.
+domains = ["*"]
+command = ["yt-dlp", "--no-playlist", "--no-progress", "--paths", "{DOWNLOAD_DIR}", "--print", "after_move:filepath", "--", "{URL}"]

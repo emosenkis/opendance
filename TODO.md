@@ -191,12 +191,14 @@ ones where they conflict.
   reuse the loaded pose engine when possible, show analyzed/total frames,
   percentage, processing FPS, ETA, and the final role/move-building phase, then
   refresh and visibly select the new song.
-- [x] Support opt-in domain-scoped URL download helpers from
-  `$XDG_CONFIG_HOME/opendance/config.toml`: choose the most-specific exact or
-  parent-domain match for HTTP(S), execute a configured argv directly without a
-  shell, provide the requested address as `URL`, and accept exactly one existing
-  downloaded-file path on stdout. Surface malformed config, unsafe URLs,
-  process failures, timeouts, and invalid output in the import dialog.
+- [x] Ship a catch-all URL-helper config that delegates HTTP(S) downloads to the
+  installed `yt-dlp`, letting its current extractor set decide which sites are
+  supported and saving into OpenDance's writable import area. Allow domain-
+  scoped overrides in `$XDG_CONFIG_HOME/opendance/config.toml`; choose the most-
+  specific exact or parent-domain match, execute argv directly without a shell,
+  provide `URL`, and accept exactly one existing downloaded-file path on stdout.
+  Surface malformed config, unsafe URLs, failures, timeouts, and invalid output
+  in the import dialog.
 - [x] Add three original, playable songs with deliberate dances whose move
   landings follow the actual beat grid. Two tracks may use the repository's
   sample-free deterministic synth; at least one must use a real generative-music

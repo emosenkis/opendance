@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from opendance.importer import (
+    DEFAULT_CONFIG_PATH,
     ImportOptions,
     config_path,
     download_url,
@@ -80,8 +81,51 @@ command = ["specific-helper", "--safe"]
             self.assertEqual(
                 run.call_args.kwargs["env"].get("PATH"), os.environ.get("PATH")
             )
-            with self.assertRaisesRegex(ValueError, "no download helper"):
+            with patch.dict(os.environ, {"OPENDANCE_LIBRARY": directory}), patch(
+                "opendance.importer.subprocess.run", return_value=completed
+            ) as fallback:
                 download_url("https://notexample.com/watch", config)
+            command = fallback.call_args.args[0]
+            self.assertEqual(command[0], "yt-dlp")
+            self.assertIn("https://notexample.com/watch", command)
+            self.assertIn(str(root / ".downloads"), command)
+
+    def test_default_config_uses_yt_dlp_as_a_catch_all(self):
+        self.assertTrue(DEFAULT_CONFIG_PATH.is_file())
+        with TemporaryDirectory() as directory, patch.dict(
+            os.environ, {"OPENDANCE_LIBRARY": directory}
+        ):
+            helpers = load_url_helpers(Path(directory) / "missing.toml")
+            self.assertEqual(helpers[-1][0], ("*",))
+            downloaded = Path(directory) / "clip.mp4"
+            downloaded.touch()
+            completed = subprocess.CompletedProcess(
+                [], 0, stdout=f"{downloaded}\n", stderr=""
+            )
+            with patch(
+                "opendance.importer.subprocess.run", return_value=completed
+            ) as run:
+                self.assertEqual(
+                    download_url(
+                        "https://a-site-supported-by-ytdlp.example/watch",
+                        Path(directory) / "missing.toml",
+                    ),
+                    downloaded.resolve(),
+                )
+            self.assertEqual(
+                run.call_args.args[0],
+                (
+                    "yt-dlp",
+                    "--no-playlist",
+                    "--no-progress",
+                    "--paths",
+                    str(Path(directory) / ".downloads"),
+                    "--print",
+                    "after_move:filepath",
+                    "--",
+                    "https://a-site-supported-by-ytdlp.example/watch",
+                ),
+            )
 
     def test_url_helper_rejects_unsafe_url_and_bad_process_output(self):
         with TemporaryDirectory() as directory:
