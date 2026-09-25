@@ -447,6 +447,15 @@ ApplicationWindow {
             return ({})
         }
 
+        function foot(person, joint) {
+            var points = person && person.keypoints ? person.keypoints : []
+            var point = points.length > joint ? points[joint] : null
+            if (!point || point.length < 2
+                    || (point.length > 2 && Number(point[2]) < 0.2))
+                return null
+            return { "x": Number(point[0]), "y": Number(point[1]) }
+        }
+
         Repeater {
             model: dancerAssignmentMarkers.dancers.length
 
@@ -455,31 +464,47 @@ ApplicationWindow {
                 required property int index
                 readonly property var modelData: dancerAssignmentMarkers.dancer(index)
                 readonly property var box: modelData.bbox || []
+                readonly property var leftFoot: dancerAssignmentMarkers.foot(modelData, 15)
+                readonly property var rightFoot: dancerAssignmentMarkers.foot(modelData, 16)
+                readonly property bool feetVisible: leftFoot !== null && rightFoot !== null
                 readonly property int dancerIndex: index
                 readonly property color dancerColor: window.playerColor(dancerIndex)
                 readonly property color indicatorColor: Qt.rgba(dancerColor.r,
                                                                   dancerColor.g,
                                                                   dancerColor.b, 0.48)
+                readonly property real feetCenter: feetVisible
+                                                        ? (leftFoot.x + rightFoot.x) / 2
+                                                        : Number(box[0]) + Number(box[2]) / 2
+                readonly property real targetWidth: feetVisible ? Math.max(
+                    36 * window.uiScale,
+                    Math.min(dancerAssignmentMarkers.width,
+                             Math.abs(leftFoot.x - rightFoot.x)
+                             * dancerAssignmentMarkers.width + 24 * window.uiScale))
+                                                               : 96 * window.uiScale
                 readonly property real targetX: box.length < 4 ? 0 : Math.max(
-                    0, Math.min(dancerAssignmentMarkers.width - width,
-                                (Number(box[0]) + Number(box[2]) / 2)
-                                * dancerAssignmentMarkers.width - width / 2))
+                    0, Math.min(dancerAssignmentMarkers.width - targetWidth,
+                                feetCenter * dancerAssignmentMarkers.width
+                                - targetWidth / 2))
                 readonly property real targetY: box.length < 4 ? 0 : Math.max(
-                    0, Math.min(dancerAssignmentMarkers.height - height,
-                                (Number(box[1]) + Number(box[3]))
+                    0, Math.min(dancerAssignmentMarkers.height - height
+                                - 40 * window.uiScale,
+                                (feetVisible ? Math.max(leftFoot.y, rightFoot.y)
+                                             : Number(box[1]) + Number(box[3]))
                                 * dancerAssignmentMarkers.height + 4 * window.uiScale))
                 property real filteredX: 0
                 property real filteredY: 0
+                property real filteredWidth: 96 * window.uiScale
                 property bool positioned: false
                 visible: box.length >= 4
                 x: filteredX
                 y: filteredY
-                width: 96 * window.uiScale
+                width: filteredWidth
                 height: 38 * window.uiScale
 
                 Component.onCompleted: {
                     filteredX = targetX
                     filteredY = targetY
+                    filteredWidth = targetWidth
                     positioned = true
                 }
                 onTargetXChanged: if (positioned
@@ -490,6 +515,10 @@ ApplicationWindow {
                                       && Math.abs(targetY - filteredY)
                                          >= 7 * window.uiScale)
                                       filteredY = targetY
+                onTargetWidthChanged: if (positioned
+                                          && Math.abs(targetWidth - filteredWidth)
+                                             >= 4 * window.uiScale)
+                                          filteredWidth = targetWidth
 
                 Behavior on x {
                     enabled: marker.positioned
@@ -505,6 +534,15 @@ ApplicationWindow {
                     NumberAnimation {
                         duration: Math.abs(marker.filteredY - marker.y)
                                   > 24 * window.uiScale ? 850 : 12000
+                        easing.type: Easing.OutCubic
+                    }
+                }
+
+                Behavior on width {
+                    enabled: marker.positioned
+                    NumberAnimation {
+                        duration: Math.abs(marker.filteredWidth - marker.width)
+                                  > 30 * window.uiScale ? 700 : 10000
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -528,7 +566,8 @@ ApplicationWindow {
                             context.beginPath()
                             context.roundedRect(12 * scale - feather,
                                                 12 * scale - feather,
-                                                72 * scale + 2 * feather,
+                                                Math.max(1, width - 24 * scale)
+                                                + 2 * feather,
                                                 14 * scale + 2 * feather,
                                                 radius, radius)
                             context.fill()
@@ -537,16 +576,6 @@ ApplicationWindow {
 
                     onWidthChanged: requestPaint()
                     onHeightChanged: requestPaint()
-                }
-
-                Label {
-                    anchors.centerIn: parent
-                    text: "D" + (parent.dancerIndex + 1)
-                    color: "#ffffff"
-                    font.pixelSize: 10 * window.uiScale
-                    font.weight: Font.Black
-                    style: Text.Outline
-                    styleColor: "#80070a12"
                 }
             }
         }
@@ -1123,9 +1152,8 @@ ApplicationWindow {
 
                                         Label {
                                             anchors.centerIn: parent
-                                            text: "P" + Number(window.itemValue(setupPlayerChip.modelData,
-                                                                                 "player_number",
-                                                                                 setupPlayerChip.playerSlot + 1))
+                                            text: String(window.itemValue(setupPlayerChip.modelData,
+                                                                          "name", "DANCER"))
                                                   + " READY"
                                             color: "#ffffff"
                                             font.pixelSize: 10 * window.uiScale
@@ -1409,9 +1437,8 @@ ApplicationWindow {
 
                             Label {
                                 anchors.centerIn: parent
-                                text: "P" + Number(window.itemValue(countdownPlayerChip.modelData,
-                                                                     "player_number",
-                                                                     countdownPlayerChip.playerSlot + 1))
+                                text: String(window.itemValue(countdownPlayerChip.modelData,
+                                                              "name", "DANCER"))
                                       + " TRACKED"
                                 color: "#ffffff"
                                 font.pixelSize: 10 * window.uiScale
@@ -1629,7 +1656,7 @@ ApplicationWindow {
 
                                 Label {
                                     anchors.centerIn: parent
-                                    text: "P" + modelData.player + "  •  " + modelData.label
+                                    text: modelData.name + "  •  " + modelData.label
                                     color: "#ffffff"
                                     font.pixelSize: 11 * window.uiScale
                                     font.weight: Font.Black
@@ -2324,7 +2351,7 @@ ApplicationWindow {
                     Label {
                         id: framingLabel
                         anchors.centerIn: parent
-                        text: "P" + modelData.player + "  " + modelData.label
+                        text: modelData.name + "  " + modelData.label
                         color: "#ffffff"
                         font.pixelSize: 10 * window.uiScale
                         font.weight: Font.Black

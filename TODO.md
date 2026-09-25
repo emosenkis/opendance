@@ -160,7 +160,7 @@ ones where they conflict.
   second), with a minimum multi-second feedback interval for legacy/unsegmented
   choreography, and place feedback so it never obscures dancer identity, score,
   assignment color, or upcoming-move information.
-- [ ] Size each feathered dancer marker from the horizontal distance between that
+- [x] Size each feathered dancer marker from the horizontal distance between that
   dancer's detected feet, smoothing width with the same dead-zone/slow-settle
   behavior as position and clamping it above the gameplay progress bar. Remove
   all numbered `P1`, `D1`, and `P1 -> D1` identity labels: assignment is color-

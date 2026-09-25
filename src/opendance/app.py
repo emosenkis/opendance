@@ -40,6 +40,7 @@ from .game import (
     GameSession,
     assign_dancers,
     load_catalog,
+    player_nickname,
     target_dancers,
     target_pose,
     target_poses,
@@ -720,10 +721,10 @@ class Backend(QObject):
     def framingCues(self) -> list[dict[str, Any]]:
         if self._selected_source == "demo":
             return []
-        player_by_track = {}
+        name_by_track = {}
         if self._session:
-            player_by_track = {
-                slot.track_id: slot.player_number
+            name_by_track = {
+                slot.track_id: player_nickname(slot.index)
                 for slot in self._session.player_slots.active_slots
                 if slot.track_id is not None
             }
@@ -745,7 +746,7 @@ class Backend(QObject):
                 cues.append(
                     {
                         "track_id": track_id,
-                        "player": player_by_track.get(track_id, index + 1),
+                        "name": name_by_track.get(track_id, player_nickname(index)),
                         "label": label,
                     }
                 )
@@ -1190,7 +1191,7 @@ class Backend(QObject):
             self._model_status = "Demo tracking"
             self._demo_tracks()
             self._players = [
-                {"name": f"PLAYER {index + 1}", "score": 0, "stars": 0}
+                {"name": player_nickname(index), "score": 0, "stars": 0}
                 for index in range(self._max_players)
             ]
         else:
@@ -1391,6 +1392,8 @@ class Backend(QObject):
             )
         self._last_inference_at = now
         self._pose_people = list(result.get("people", []))
+        for index, person in enumerate(self._pose_people):
+            person["name"] = player_nickname(index)
         events = self._gestures.update(self._pose_people, now)
         if self._screen in ("library", "setup", "settings", "results") or (
             self._screen == "game" and self._paused
@@ -1412,7 +1415,7 @@ class Backend(QObject):
                 {
                     "slot": index,
                     "player_number": index + 1,
-                    "name": f"PLAYER {index + 1}",
+                    "name": player_nickname(index),
                     "score": 0,
                     "stars": 0,
                 }

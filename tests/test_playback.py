@@ -348,6 +348,24 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertIn(">= 7 * window.uiScale", marker)
         self.assertIn("> 30 * window.uiScale ? 700 : 10000", marker)
         self.assertIn("> 24 * window.uiScale ? 850 : 12000", marker)
+        self.assertIn("leftFoot", marker)
+        self.assertIn("rightFoot", marker)
+        self.assertIn("targetWidth", marker)
+        self.assertIn("filteredWidth", marker)
+        self.assertIn("- 40 * window.uiScale", marker)
+        self.assertNotIn('text: "D" +', marker)
+
+        player_ui = "\n".join(
+            files("opendance.qml").joinpath(name).read_text(encoding="utf-8")
+            for name in (
+                "Main.qml",
+                "components/PlayerHud.qml",
+                "components/FeedbackBurst.qml",
+                "components/SkeletonView.qml",
+            )
+        )
+        self.assertNotIn('text: "P" +', player_ui)
+        self.assertNotIn("→D", player_ui)
 
     def test_library_reads_metadata_before_dense_choreography(self):
         with TemporaryDirectory() as directory:

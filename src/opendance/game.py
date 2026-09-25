@@ -19,6 +19,7 @@ from typing import Hashable, Mapping, Sequence
 Point = tuple[float, float, float]
 Pose = tuple[Point, ...]
 TrackId = Hashable
+PLAYER_NICKNAMES = ("SPARK", "GROOVE", "BOUNCE", "TWIRL", "GLIDE", "SHINE")
 
 COCO_KEYPOINTS = (
     "nose",
@@ -62,6 +63,10 @@ GRADE_THRESHOLDS = (
 
 _STAR_THRESHOLDS = (0.20, 0.40, 0.60, 0.75, 0.90)
 _DEFAULT_CATALOG = Path(__file__).with_name("content") / "songs.json"
+
+
+def player_nickname(slot: int) -> str:
+    return PLAYER_NICKNAMES[int(slot) % len(PLAYER_NICKNAMES)]
 
 
 def load_catalog(path: str | Path | None = None) -> list[dict]:
@@ -1321,7 +1326,7 @@ class GameSession:
             player = self._score_result(score)
             player.update(
                 {
-                    "name": f"PLAYER {slot.player_number}",
+                    "name": player_nickname(slot.index),
                     "combo": score.combo,
                     "visible": slot.visible,
                     "dancer_index": self.dancer_assignments.get(slot.index, 0),
@@ -1517,6 +1522,7 @@ class GameSession:
         return {
             "slot": score.slot,
             "player_number": score.slot + 1,
+            "name": player_nickname(score.slot),
             "score": score.points,
             "possible_score": score.possible_points,
             "accuracy": score.accuracy,

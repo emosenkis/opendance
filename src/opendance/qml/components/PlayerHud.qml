@@ -36,19 +36,6 @@ GlassPanel {
             border.width: 2
             border.color: root.player ? root.playerColor : "#555e72"
 
-            Label {
-                anchors.centerIn: parent
-                text: root.player
-                      ? "P" + root.playerNumber
-                        + (root.player.dancer_index !== undefined
-                           ? "→D" + (Number(root.player.dancer_index) + 1) : "")
-                      : "+"
-                color: root.player ? "#ffffff" : "#8d97ab"
-                font.pixelSize: (root.player && root.player.dancer_index !== undefined ? 12 : 17)
-                                * root.contentScale
-                font.weight: Font.Black
-            }
-
             SequentialAnimation on scale {
                 running: !!root.player && !root.reducedMotion
                 loops: Animation.Infinite
@@ -67,7 +54,7 @@ GlassPanel {
 
                 Label {
                     width: parent.width - comboLabel.width
-                    text: root.player ? root.value("name", "PLAYER " + root.playerNumber) : "STEP IN TO JOIN"
+                    text: root.player ? root.value("name", "DANCER") : "STEP IN TO JOIN"
                     color: root.player ? "#f8fbff" : "#8d97ab"
                     font.pixelSize: 12 * root.contentScale
                     font.weight: Font.Bold

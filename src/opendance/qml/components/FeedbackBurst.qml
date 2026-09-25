@@ -77,16 +77,6 @@ Item {
         spacing: root.compact ? -2 : -4
 
         Label {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: "PLAYER " + Number(root.value("player_number", Number(root.value("slot", 0)) + 1))
-            visible: !root.compact
-            color: "#ffffff"
-            font.pixelSize: 11
-            font.weight: Font.Black
-            font.letterSpacing: 1.2
-        }
-
-        Label {
             id: ratingLabel
             anchors.horizontalCenter: parent.horizontalCenter
             color: root.feedbackColor()

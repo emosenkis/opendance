@@ -102,8 +102,7 @@ Item {
 
         if (root.showLabels) {
             var label = person && person.name !== undefined ? person.name
-                      : person && person.player !== undefined ? "P" + person.player
-                      : "DANCER " + (personIndex + 1)
+                      : "DANCER"
             var anchor = point(joints[0])
             context.shadowBlur = 0
             context.fillStyle = "#ffffff"

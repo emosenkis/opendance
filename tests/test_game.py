@@ -11,6 +11,7 @@ from opendance.game import (
     PlayerSlots,
     load_catalog,
     named_pose,
+    player_nickname,
     pose_similarity,
     stars_for_accuracy,
     target_pose,
@@ -163,6 +164,8 @@ class GameCoreTest(unittest.TestCase):
         self.assertEqual(session.update(2, {7: [(0, 0, 0)] * 17})[0].grade, "MISS")
         result = session.results()["players"][0]
         self.assertEqual((result["score"], result["stars"]), (2_000, 3))
+        self.assertEqual(result["name"], player_nickname(0))
+        self.assertEqual(session.ui_players()[0]["name"], "SPARK")
         self.assertEqual(session.ui_players()[0]["combo"], 0)
         self.assertEqual(stars_for_accuracy(0.9), 5)
 
