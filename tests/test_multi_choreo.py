@@ -436,6 +436,7 @@ class MultiDancerTest(unittest.TestCase):
 
         engine = Engine()
         progress = []
+        previews = []
         with TemporaryDirectory() as directory:
             video = Path(directory) / "video.mp4"
             video.touch()
@@ -447,6 +448,9 @@ class MultiDancerTest(unittest.TestCase):
                     trim_end_s=2,
                     show_progress=False,
                     progress_callback=lambda *values: progress.append(values),
+                    preview_callback=lambda frame, people: previews.append(
+                        (frame, people)
+                    ),
                 )
 
         self.assertEqual([frame for frame, _time in engine.calls], list(range(3, 8)))
@@ -456,6 +460,9 @@ class MultiDancerTest(unittest.TestCase):
         self.assertEqual(progress[0][:2], (0, 8))
         self.assertEqual(progress[-1][:2], (8, 8))
         self.assertGreater(progress[-1][2], 0)
+        self.assertEqual(len(previews), 1)
+        self.assertEqual(previews[0][0], 3)
+        self.assertEqual(previews[0][1][0]["track_id"], 1)
 
         capture = Capture()
         cancelled = threading.Event()
@@ -536,6 +543,7 @@ class MultiDancerTest(unittest.TestCase):
             trim_end_s=2.0,
             show_progress=False,
             progress_callback=None,
+            preview_callback=None,
             cancel_event=None,
         )
         self.assertEqual(song["duration"], 6)

@@ -832,6 +832,7 @@ def analyze_video(
     trim_end_s: float = 0.0,
     show_progress: bool = True,
     progress_callback: Callable[[int, int | None, float], None] | None = None,
+    preview_callback: Callable[[Any, list[dict[str, Any]]], None] | None = None,
     cancel_event: Any | None = None,
 ) -> dict[str, Any]:
     """Run ``engine`` on every decoded frame and retain the video's timestamps."""
@@ -880,6 +881,7 @@ def analyze_video(
     source_size = {"width": 0, "height": 0}
     started = time.perf_counter()
     last_progress = started
+    last_preview = -math.inf
     if progress_callback:
         progress_callback(0, expected_frames, 0.0)
     try:
@@ -929,6 +931,9 @@ def analyze_video(
             )
 
             now = time.perf_counter()
+            if preview_callback and now - last_preview >= 5.0:
+                preview_callback(frame, people)
+                last_preview = now
             interval = 0.25 if progress_callback else 0.5 if sys.stderr.isatty() else 5.0
             if (show_progress or progress_callback) and now - last_progress >= interval:
                 elapsed = max(now - started, 1e-9)
@@ -1057,6 +1062,7 @@ def extract_song(
     force: bool = False,
     show_progress: bool = True,
     progress_callback: Callable[[int, int | None, float], None] | None = None,
+    preview_callback: Callable[[Any, list[dict[str, Any]]], None] | None = None,
     cancel_event: Any | None = None,
 ) -> Path:
     """Analyze a video and atomically create ``OUTPUT_DIR/song.json``."""
@@ -1123,6 +1129,7 @@ def extract_song(
         trim_end_s=trim_end,
         show_progress=show_progress,
         progress_callback=progress_callback,
+        preview_callback=preview_callback,
         cancel_event=cancel_event,
     )
     source_duration = float(analysis["source"]["duration_ms"]) / 1_000.0

@@ -216,7 +216,7 @@ ones where they conflict.
 - [x] Stream machine-readable yt-dlp download percentage, bytes, speed, and ETA
   into the in-app import progress/status while preserving cancellation, timeout,
   custom helper compatibility, and the final-path stdout contract.
-- [ ] While in-app pose extraction is running, replace the editable Add Song form
+- [x] While in-app pose extraction is running, replace the editable Add Song form
   with the latest processed video frame and its detected pose overlay, refreshing
   every 5–10 seconds without slowing the frame-analysis hot path; retain the
   extraction percentage, frame count, processing FPS, ETA, and cancel-safe UI.

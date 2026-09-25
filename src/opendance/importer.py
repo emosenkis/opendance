@@ -414,6 +414,7 @@ def extract_imported_song(
     options: ImportOptions = ImportOptions(),
     metadata: dict[str, Any] | None = None,
     progress_callback: Callable[[int, int | None, float], None] | None = None,
+    preview_callback: Callable[[Any, list[dict[str, Any]]], None] | None = None,
     cancel_event: Any | None = None,
     existing_ids: set[str] | None = None,
 ) -> Path:
@@ -480,6 +481,7 @@ def extract_imported_song(
             hide_video_intro=hide_intro,
             show_progress=False,
             progress_callback=progress_callback,
+            preview_callback=preview_callback,
             cancel_event=cancel_event,
         )
     except Exception:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import math
 import os
@@ -326,6 +327,7 @@ class Backend(QObject):
     _import_completed = Signal(str)
     _import_failed = Signal(str)
     _import_progress = Signal(object)
+    _import_preview = Signal(object)
 
     def __init__(
         self,
@@ -466,6 +468,7 @@ class Backend(QObject):
         self._song_import_busy = False
         self._song_import_status = ""
         self._song_import_progress = -1.0
+        self._song_import_preview: dict[str, Any] = {}
         self._song_import_worker: threading.Thread | None = None
         self._song_import_cancel = threading.Event()
         self._import_capture_paused = False
@@ -476,6 +479,7 @@ class Backend(QObject):
         self._import_completed.connect(self._on_import_completed)
         self._import_failed.connect(self._on_import_failed)
         self._import_progress.connect(self._on_import_progress)
+        self._import_preview.connect(self._on_import_preview)
         self._source_player.errorOccurred.connect(
             lambda _error, message: self._set_model_status(f"Video source error: {message}")
         )
@@ -602,6 +606,10 @@ class Backend(QObject):
     @Property(float, notify=songImportChanged)
     def songImportProgress(self) -> float:
         return self._song_import_progress
+
+    @Property("QVariantMap", notify=songImportChanged)
+    def songImportPreview(self) -> dict[str, Any]:
+        return dict(self._song_import_preview)
 
     @Property(bool, constant=True)
     def alternateSourcesEnabled(self) -> bool:
@@ -851,6 +859,7 @@ class Backend(QObject):
         self._song_import = {}
         self._song_import_busy = True
         self._song_import_progress = -1.0
+        self._song_import_preview = {}
         self._song_import_cancel.clear()
         self._song_import_status = (
             "Downloading video…" if remote else "Reading video metadata…"
@@ -924,6 +933,7 @@ class Backend(QObject):
         self._song_import = {}
         self._song_import_status = ""
         self._song_import_progress = -1.0
+        self._song_import_preview = {}
         self.songImportChanged.emit()
 
     @Slot("QVariantMap")
@@ -955,6 +965,7 @@ class Backend(QObject):
         self._import_capture_paused = True
         self._song_import_busy = True
         self._song_import_progress = -1.0
+        self._song_import_preview = {}
         self._song_import_cancel.clear()
         self._song_import_status = "Extracting choreography… This can take several minutes."
         self.songImportChanged.emit()
@@ -982,6 +993,7 @@ class Backend(QObject):
                     progress_callback=lambda done, total, fps: self._import_progress.emit(
                         (done, total, fps)
                     ),
+                    preview_callback=self._encode_import_preview,
                     cancel_event=self._song_import_cancel,
                     existing_ids={str(song.get("id", "")) for song in self._catalog},
                 )
@@ -1042,6 +1054,26 @@ class Backend(QObject):
             )
         self.songImportChanged.emit()
 
+    def _encode_import_preview(
+        self, frame: Any, people: list[dict[str, Any]]
+    ) -> None:
+        import cv2
+
+        encoded, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        if encoded and not self._song_import_cancel.is_set():
+            self._import_preview.emit(
+                {
+                    "image": "data:image/jpeg;base64,"
+                    + base64.b64encode(jpeg.tobytes()).decode("ascii"),
+                    "people": people,
+                }
+            )
+
+    @Slot(object)
+    def _on_import_preview(self, preview: dict[str, Any]) -> None:
+        self._song_import_preview = dict(preview)
+        self.songImportChanged.emit()
+
     def _resume_after_song_import(self) -> None:
         if self._import_capture_paused:
             self._import_capture_paused = False
@@ -1065,6 +1097,7 @@ class Backend(QObject):
         self._song_import = {}
         self._song_import_busy = False
         self._song_import_progress = -1.0
+        self._song_import_preview = {}
         self._song_import_status = f"Added {title} to the song library."
         self._resume_after_song_import()
         self.songImportChanged.emit()
@@ -1074,6 +1107,7 @@ class Backend(QObject):
     def _on_import_failed(self, message: str) -> None:
         self._song_import_busy = False
         self._song_import_progress = -1.0
+        self._song_import_preview = {}
         self._song_import_status = f"Error: {message}"
         self._resume_after_song_import()
         self.songImportChanged.emit()

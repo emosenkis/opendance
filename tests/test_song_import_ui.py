@@ -15,6 +15,7 @@ def backend_stub() -> Backend:
     backend._song_import_busy = False
     backend._song_import_status = ""
     backend._song_import_progress = -1.0
+    backend._song_import_preview = {}
     backend._song_import_worker = None
     backend._song_import_cancel = threading.Event()
     backend._import_capture_paused = False
@@ -24,6 +25,7 @@ def backend_stub() -> Backend:
     backend._import_completed = SimpleNamespace(emit=Mock())
     backend._import_failed = SimpleNamespace(emit=Mock())
     backend._import_progress = SimpleNamespace(emit=Mock())
+    backend._import_preview = SimpleNamespace(emit=Mock())
     backend._apply_source = Mock()
     return backend
 
@@ -109,6 +111,10 @@ class SongImportBridgeTests(unittest.TestCase):
         backend._on_import_progress((1_000, 1_000, 25.0))
         self.assertEqual(backend._song_import_progress, 1.0)
         self.assertIn("Building stable dancer roles", backend._song_import_status)
+
+        preview = {"image": "data:image/jpeg;base64,abc", "people": [{"track_id": 1}]}
+        backend._on_import_preview(preview)
+        self.assertEqual(backend._song_import_preview, preview)
 
     def test_completed_handler_refreshes_and_selects_imported_catalog_entry(self):
         with TemporaryDirectory() as directory:
@@ -204,6 +210,7 @@ class SongImportBridgeTests(unittest.TestCase):
         self.assertEqual(kwargs["metadata"], backend._song_import)
         self.assertIs(kwargs["cancel_event"], backend._song_import_cancel)
         self.assertEqual(kwargs["existing_ids"], {"already-there"})
+        self.assertEqual(kwargs["preview_callback"], backend._encode_import_preview)
         kwargs["progress_callback"](12, 40, 20.0)
         backend._import_progress.emit.assert_called_once_with((12, 40, 20.0))
         backend._import_completed.emit.assert_called_once_with(str(manifest))

@@ -26,11 +26,13 @@ Popup {
     readonly property var draft: appBackend.songImport || ({})
     readonly property bool busy: Boolean(appBackend.songImportBusy)
     readonly property real progress: Number(appBackend.songImportProgress)
+    readonly property var preview: appBackend.songImportPreview || ({})
     readonly property real duration: Number(value("duration", 0)) || 0
     readonly property real trimStart: Number(trimStartField.text) || 0
     readonly property real trimEnd: Number(trimEndField.text) || 0
     readonly property real hiddenIntro: Number(hiddenIntroField.text) || 0
     readonly property bool ready: String(value("source", "")).length > 0
+    readonly property bool extracting: busy && ready
     readonly property bool validOptions: ready
                                          && titleField.text.trim().length > 0
                                          && artistField.text.trim().length > 0
@@ -129,7 +131,8 @@ Popup {
                 }
 
                 Label {
-                    text: dialog.ready ? "Review before extracting choreography"
+                text: dialog.extracting ? "Extracting poses and building dance moves"
+                     : dialog.ready ? "Review before extracting choreography"
                                        : "Choose a local video or paste a supported URL"
                     color: "#9aa6bd"
                     font.pixelSize: 11 * dialog.uiScale
@@ -148,6 +151,7 @@ Popup {
         RowLayout {
             Layout.fillWidth: true
             spacing: 9 * dialog.uiScale
+            visible: !dialog.extracting
 
             NeonButton {
                 id: fileButton
@@ -180,12 +184,58 @@ Popup {
             Layout.fillWidth: true
             Layout.preferredHeight: 1
             color: "#30374a"
+            visible: !dialog.extracting
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: dialog.extracting
+            clip: true
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 12 * dialog.uiScale
+                color: "#05070d"
+            }
+
+            Label {
+                anchors.centerIn: parent
+                visible: !String(dialog.preview.image || "").length
+                text: "PROCESSING FIRST FRAME…"
+                color: "#7f8ba2"
+                font.pixelSize: 13 * dialog.uiScale
+                font.weight: Font.Bold
+                font.letterSpacing: 1.2
+            }
+
+            Image {
+                id: extractionFrame
+                anchors.fill: parent
+                source: String(dialog.preview.image || "")
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                cache: false
+            }
+
+            SkeletonView {
+                x: (parent.width - extractionFrame.paintedWidth) / 2
+                y: (parent.height - extractionFrame.paintedHeight) / 2
+                width: extractionFrame.paintedWidth
+                height: extractionFrame.paintedHeight
+                people: dialog.preview.people || []
+                mirror: false
+                showBoxes: true
+                showLabels: false
+                lineScale: 1.25
+            }
         }
 
         ScrollView {
             id: importScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: !dialog.extracting
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
@@ -399,6 +449,7 @@ Popup {
                 primary: true
                 accent: "#7cff9b"
                 enabled: dialog.validOptions && !dialog.busy
+                visible: !dialog.extracting
                 onClicked: dialog.extract()
             }
         }
