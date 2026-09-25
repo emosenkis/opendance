@@ -16,6 +16,7 @@ GlassPanel {
     }
 
     accent: playerColor
+    z: feedback ? 5 : 0
     implicitWidth: 248
     implicitHeight: 96
 
@@ -101,8 +102,12 @@ GlassPanel {
     }
 
     FeedbackBurst {
-        anchors.fill: parent
-        z: 2
+        anchors.top: parent.bottom
+        anchors.topMargin: 3 * root.contentScale
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 170 * root.contentScale
+        height: 58 * root.contentScale
+        z: 10
         compact: true
         feedback: root.feedback
         reducedMotion: root.reducedMotion

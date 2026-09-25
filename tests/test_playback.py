@@ -12,8 +12,10 @@ from PySide6.QtMultimedia import QMediaPlayer
 
 from opendance.app import (
     Backend,
+    FEEDBACK_INTERVAL_SECONDS,
     MAX_PLAYERS,
     _enabled,
+    _feedback_due,
     _interpolated_media_time,
     song_preview,
     song_manifest_metadata,
@@ -77,6 +79,15 @@ class PlaybackPolicyTest(unittest.TestCase):
 
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)
+
+    def test_feedback_is_not_reshown_inside_the_minimum_interval(self):
+        self.assertFalse(_feedback_due(3.9, 2.0))
+        self.assertTrue(_feedback_due(2.0 + FEEDBACK_INTERVAL_SECONDS, 2.0))
+
+        qml = files("opendance").joinpath("qml/components/PlayerHud.qml").read_text()
+        feedback = qml.split("FeedbackBurst {", 1)[1]
+        self.assertNotIn("anchors.fill: parent", feedback)
+        self.assertIn("anchors.top: parent.bottom", feedback)
 
     def test_game_can_start_before_a_player_is_detected(self):
         backend = Backend.__new__(Backend)

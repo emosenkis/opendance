@@ -156,8 +156,8 @@ ones where they conflict.
   the song/video audio and visual feedback. This supersedes the earlier request
   for frequent audible gameplay stingers.
 - [x] Stop judgement feedback from flickering/restarting invisibly.
-- [ ] Show at most one judgement per completed dance move (never several times a
-  second), with a minimum multi-second scoring window for legacy/unsegmented
+- [x] Show at most one judgement per completed dance move (never several times a
+  second), with a minimum multi-second feedback interval for legacy/unsegmented
   choreography, and place feedback so it never obscures dancer identity, score,
   assignment color, or upcoming-move information.
 - [ ] Size each feathered dancer marker from the horizontal distance between that

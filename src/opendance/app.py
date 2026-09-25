@@ -55,10 +55,15 @@ from .vision import GestureController
 
 
 MAX_PLAYERS = 6
+FEEDBACK_INTERVAL_SECONDS = 2.0
 
 
 def _enabled(value: Any) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _feedback_due(now: float, last_shown: float) -> bool:
+    return now - last_shown >= FEEDBACK_INTERVAL_SECONDS
 
 
 def song_media_path(song: dict[str, Any], kind: str) -> Path | None:
@@ -428,6 +433,7 @@ class Backend(QObject):
         self._target_pose: list[list[float]] = []
         self._players: list[dict[str, Any]] = []
         self._feedback: list[dict[str, Any]] = []
+        self._last_feedback_at = -math.inf
         self._result: dict[str, Any] = {}
         self._song_time = 0.0
         self._countdown = 3
@@ -1213,6 +1219,7 @@ class Backend(QObject):
             mirror_player_positions=self._selected_source != "demo",
         )
         self._feedback = []
+        self._last_feedback_at = -math.inf
         self.feedbackChanged.emit()
         self._result = {}
         self._song_time = 0.0
@@ -1604,10 +1611,11 @@ class Backend(QObject):
         )
         scoring_time = max(0.0, self._song_time - self._latency_ms / 1000.0)
         new_feedback = self._session.update(scoring_time, tracks)
-        if new_feedback:
+        if new_feedback and _feedback_due(self._song_time, self._last_feedback_at):
             self._feedback = [
                 item if isinstance(item, dict) else vars(item) for item in new_feedback
             ][-self._max_players :]
+            self._last_feedback_at = self._song_time
             self.feedbackChanged.emit()
         players = self._session.ui_players()
         if players != self._players:

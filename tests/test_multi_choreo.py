@@ -239,9 +239,9 @@ class MultiDancerTest(unittest.TestCase):
 
     def test_move_scoring_segments_normalized_multi_dancer_motion(self):
         timeline = []
-        for frame_index in range(12):
+        for frame_index in range(24):
             time_s = frame_index * 0.25
-            pose = "ready" if time_s < 1.5 else "star"
+            pose = "ready" if time_s < 3 else "star"
             timeline.append(
                 {
                     "timestamp_ms": time_s * 1000,
@@ -264,7 +264,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertEqual(artifact["phase_count"], 12)
         self.assertEqual(
             [(segment["start"], segment["end"]) for segment in artifact["segments"]],
-            [(0.0, 1.5), (1.5, 2.75)],
+            [(0.0, 3.0), (3.0, 5.75)],
         )
         self.assertTrue(
             all(len(segment["dancers"]) == 2 for segment in artifact["segments"])
@@ -280,7 +280,7 @@ class MultiDancerTest(unittest.TestCase):
 
     def test_move_scoring_preserves_root_travel_in_definition(self):
         timeline = []
-        for frame_index in range(5):
+        for frame_index in range(9):
             time_s = frame_index * 0.25
             timeline.append(
                 {
@@ -289,7 +289,7 @@ class MultiDancerTest(unittest.TestCase):
                         {
                             "dancer_index": 0,
                             "keypoints": transformed(
-                                "ready", -0.15 + 0.15 * time_s, 0.8
+                                "ready", -0.15 + 0.075 * time_s, 0.8
                             ),
                         }
                     ],
