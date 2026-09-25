@@ -128,8 +128,8 @@ ones where they conflict.
   mapped through aspect-fit video geometry.
 - [x] Show synchronized lyrics when available.
 - [x] Provide optional heads-up upcoming-move pose cues.
-- [x] Provide frequent per-player visual judgements, combos, points, 0–5 stars,
-  earned currency, song unlocks, and celebratory effects.
+- [x] Provide per-move player judgements, combos, points, 0–5 stars, earned
+  currency, song unlocks, and celebratory effects without rapid-fire feedback.
 - [x] Replace the extracted-video fallback's periodic single-frame pose-copy
   scoring with the authored dance-move segments: capture each player's motion
   across the complete segment, judge once when that move ends, and keep scoring
@@ -145,8 +145,8 @@ ones where they conflict.
   on the one to three most important moving body parts instead of animation.
 - [x] Make every live-player-to-authored-dancer assignment unmistakable: use one
   stable dancer color on that player's score bar, their next-move cue, and their
-  real-time mini-view skeleton, label the player/dancer relationship directly,
-  and place one same-color, borderless translucent rounded rectangle below the
+  real-time mini-view skeleton without numbered relationship labels, and place
+  one same-color, borderless translucent rounded rectangle below the
   corresponding dancer's feet in source video, feathered at every edge until it
   fades to transparency. Keep each indicator keyed to its dancer role; settle
   small foot/bounding-box changes almost imperceptibly slowly, but smoothly
