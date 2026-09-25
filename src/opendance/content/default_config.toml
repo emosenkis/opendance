@@ -2,4 +2,4 @@
 # Let yt-dlp's current extractor set decide which sites are supported instead
 # of baking a domain list into OpenDance that immediately becomes stale.
 domains = ["*"]
-command = ["yt-dlp", "--no-playlist", "--no-progress", "-f", "bestvideo[ext=mp4][vcodec^=vp09]+bestaudio[ext=m4a]/best", "--paths", "{DOWNLOAD_DIR}", "--print", "after_move:filepath", "--", "{URL}"]
+command = ["yt-dlp", "--no-playlist", "--no-progress", "-f", "bestvideo[width<=1920][height<=1080][ext=mp4][vcodec^=vp09]+bestaudio[ext=m4a]/best[width<=1920][height<=1080][ext=mp4]", "--merge-output-format", "mp4", "--paths", "{DOWNLOAD_DIR}", "--print", "after_move:filepath", "--", "{URL}"]

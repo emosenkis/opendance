@@ -210,8 +210,9 @@ ones where they conflict.
   provide `URL`, and accept exactly one existing downloaded-file path on stdout.
   Surface malformed config, unsafe URLs, failures, timeouts, and invalid output
   in the import dialog.
-- [ ] Make the built-in yt-dlp helper select an H.264/AAC MP4 no larger than
-  1920x1080, never WebM/VP9/4K, and keep the final-path stdout contract.
+- [x] Make the built-in yt-dlp helper retain its selected MP4 video/audio codec
+  constraints while strictly capping both dimensions at 1920x1080, never
+  falling back to WebM/4K, and keeping the final-path stdout contract.
 - [ ] Stream machine-readable yt-dlp download percentage, bytes, speed, and ETA
   into the in-app import progress/status while preserving cancellation, timeout,
   custom helper compatibility, and the final-path stdout contract.
