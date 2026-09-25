@@ -1207,8 +1207,6 @@ class Backend(QObject):
         if self._presentation_mode:
             self._start_presentation()
             return
-        if not self._players:
-            return
         self._session = GameSession(
             self._selected_song,
             max_players=self._max_players,

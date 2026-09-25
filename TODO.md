@@ -96,7 +96,7 @@ ones where they conflict.
 - [x] Detect players dynamically: start with any nonzero player count and allow
   joining, leaving, short-term re-identification, and returning mid-song without
   configuring a count in advance.
-- [ ] Allow the song/countdown to start before any live dancer has been detected;
+- [x] Allow the song/countdown to start before any live dancer has been detected;
   players may step into view and join after playback has begun.
 - [x] Prevent a newly enrolled dancer from inheriting an expired player's
   score/combo.

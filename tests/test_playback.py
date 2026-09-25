@@ -78,6 +78,26 @@ class PlaybackPolicyTest(unittest.TestCase):
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)
 
+    def test_game_can_start_before_a_player_is_detected(self):
+        backend = Backend.__new__(Backend)
+        backend._presentation_mode = False
+        backend._players = []
+        backend._catalog = [{"id": "test"}]
+        backend._song_index = 0
+        backend._max_players = 6
+        backend._selected_source = "camera"
+        backend._feedback = []
+        backend.feedbackChanged = SimpleNamespace(emit=Mock())
+        backend._result = {}
+        backend._prepare_song = Mock()
+        backend.changed = SimpleNamespace(emit=Mock())
+
+        with patch("opendance.app.GameSession") as session:
+            backend.startGame()
+
+        session.assert_called_once()
+        self.assertEqual(backend._screen, "countdown")
+
     def test_discovered_default_camera_is_activated_without_clicking_it(self):
         device = SimpleNamespace(
             id=lambda: b"usb-camera",

@@ -1292,13 +1292,10 @@ ApplicationWindow {
                             anchors.margins: 16 * window.uiScale
                             text: "START DANCING"
                             hint: window.playerList.length > 0 ? window.playerList.length + " dancer(s) detected"
-                                                               : backend.joinGestureOnly
-                                                                 ? "Raise both hands to join"
-                                                                 : "Step in to start • others can join later"
+                                                               : "Start now • step in any time"
                             primary: true
                             accent: "#7cff9b"
-                            enabled: window.playerList.length > 0
-                                     && String(backend.modelStatus).toLowerCase().indexOf("error") < 0
+                            enabled: String(backend.modelStatus).toLowerCase().indexOf("error") < 0
                                      && String(backend.modelStatus).toLowerCase().indexOf("unavailable") < 0
                             onClicked: backend.startGame()
                         }
