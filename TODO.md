@@ -213,13 +213,17 @@ ones where they conflict.
 - [x] Make the built-in yt-dlp helper retain its selected MP4 video/audio codec
   constraints while strictly capping both dimensions at 1920x1080, never
   falling back to WebM/4K, and keeping the final-path stdout contract.
-- [ ] Stream machine-readable yt-dlp download percentage, bytes, speed, and ETA
+- [x] Stream machine-readable yt-dlp download percentage, bytes, speed, and ETA
   into the in-app import progress/status while preserving cancellation, timeout,
   custom helper compatibility, and the final-path stdout contract.
 - [ ] While in-app pose extraction is running, replace the editable Add Song form
   with the latest processed video frame and its detected pose overlay, refreshing
   every 5–10 seconds without slowing the frame-analysis hot path; retain the
   extraction percentage, frame count, processing FPS, ETA, and cancel-safe UI.
+- [ ] Remove the in-app “copy video” choice. Always package an intact playable
+  video; for URL imports move the helper-downloaded file into the song package
+  so exactly one copy remains, while local-file imports preserve the user's
+  source and copy it into the package.
 - [x] Add three original, playable songs with deliberate dances whose move
   landings follow the actual beat grid. Two tracks may use the repository's
   sample-free deterministic synth; at least one must use a real generative-music
