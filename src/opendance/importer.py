@@ -37,7 +37,6 @@ class ImportOptions:
     trim_start: float = 0.0
     trim_end: float = 0.0
     hide_video_intro: float = 0.0
-    copy_video: bool = True
     lrc: str | os.PathLike[str] | None = None
 
 
@@ -437,8 +436,6 @@ def extract_imported_song(
         raise ValueError("dancer count must be between 1 and 6")
     if options.dancer_count > engine.max_people:
         raise ValueError(f"dancer count exceeds detector limit of {engine.max_people}")
-    if not isinstance(options.copy_video, bool):
-        raise ValueError("copy video must be true or false")
     trim_start = _seconds(options.trim_start, "trim start")
     trim_end = _seconds(options.trim_end, "trim end")
     hide_intro = _seconds(options.hide_video_intro, "hidden video intro")
@@ -476,7 +473,8 @@ def extract_imported_song(
             artist=artist,
             song_id=song_id,
             dancer_count=options.dancer_count,
-            copy_video=options.copy_video,
+            copy_video=True,
+            move_video=bool(details.get("_downloaded")),
             trim_start=trim_start,
             trim_end=trim_end,
             hide_video_intro=hide_intro,

@@ -155,8 +155,8 @@ downloading the multi-gigabyte GPU stack.
 ## Import choreography
 
 From the app, open **Settings → Add Song**, choose a local video or enter a URL,
-then review its title, artist, trims, hidden opening, dancer count, optional LRC
-lyrics, and whether to copy the video before extraction. Embedded media metadata
+then review its title, artist, trims, hidden opening, dancer count, and optional
+LRC lyrics before extraction. Embedded media metadata
 is read with `ffprobe` when available or the bundled Qt media backend otherwise;
 file-name values remain editable fallbacks. Imports go to `OPENDANCE_LIBRARY`
 when set, or the per-user XDG data library

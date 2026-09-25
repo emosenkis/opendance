@@ -37,6 +37,32 @@ class ImmediateThread:
 
 
 class SongImportBridgeTests(unittest.TestCase):
+    def test_url_source_is_marked_for_single_copy_packaging(self):
+        with TemporaryDirectory() as directory:
+            video = Path(directory) / "download.mp4"
+            video.touch()
+            backend = backend_stub()
+            with (
+                patch("opendance.app.threading.Thread", ImmediateThread),
+                patch("opendance.app.download_url", return_value=video),
+                patch(
+                    "opendance.app.probe_video_metadata",
+                    return_value={"title": "Download", "artist": "Artist"},
+                ),
+            ):
+                backend._begin_song_import_source(
+                    "https://example.com/watch", remote=True
+                )
+
+        backend._import_prepared.emit.assert_called_once_with(
+            {
+                "source": str(video),
+                "_downloaded": True,
+                "title": "Download",
+                "artist": "Artist",
+            }
+        )
+
     def test_prepared_and_failed_handlers_publish_ui_state_and_resume_capture(self):
         backend = backend_stub()
         details = {
@@ -150,7 +176,6 @@ class SongImportBridgeTests(unittest.TestCase):
                     "trim_start": 1.25,
                     "trim_end": 2.5,
                     "hide_video_intro": 3.75,
-                    "copy_video": False,
                 }
             )
 
@@ -173,7 +198,6 @@ class SongImportBridgeTests(unittest.TestCase):
                 trim_start=1.25,
                 trim_end=2.5,
                 hide_video_intro=3.75,
-                copy_video=False,
                 lrc="/tmp/dance.lrc",
             ),
         )

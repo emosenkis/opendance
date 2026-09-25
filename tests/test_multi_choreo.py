@@ -521,9 +521,13 @@ class MultiDancerTest(unittest.TestCase):
                     trim_start=2,
                     trim_end=2,
                     hide_video_intro=1,
+                    copy_video=True,
+                    move_video=True,
                     show_progress=False,
                 )
             song = json.loads(output.read_text(encoding="utf-8"))
+            self.assertFalse(source.exists())
+            self.assertTrue((output.parent / "video.mp4").is_file())
 
         mocked.assert_called_once_with(
             source,
@@ -537,6 +541,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertEqual(song["duration"], 6)
         self.assertEqual(song["media_start"], 2)
         self.assertEqual(song["video_hidden_until"], 1)
+        self.assertEqual(song["video"], "video.mp4")
         self.assertEqual(song["lyrics"], [
             {"time": 0.0, "text": "Opening"},
             {"time": 1.0, "text": "Dance"},

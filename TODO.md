@@ -196,7 +196,7 @@ ones where they conflict.
   URL, automatically prefill embedded/file-name title, artist, and duration,
   then review/edit the useful extraction choices before work begins. Expose
   title, artist, start/end trim, hidden opening video, 1–6 authored dancers,
-  portable video copying, and optional LRC lyrics while keeping model, device,
+  automatic portable video packaging, and optional LRC lyrics while keeping model, device,
   image-size, smoothing, raw-track, ID, CLI-progress, and overwrite controls out of
   the end-user flow. Run download/metadata/extraction work off the UI thread,
   reuse the loaded pose engine when possible, show analyzed/total frames,
@@ -220,7 +220,7 @@ ones where they conflict.
   with the latest processed video frame and its detected pose overlay, refreshing
   every 5–10 seconds without slowing the frame-analysis hot path; retain the
   extraction percentage, frame count, processing FPS, ETA, and cancel-safe UI.
-- [ ] Remove the in-app “copy video” choice. Always package an intact playable
+- [x] Remove the in-app “copy video” choice. Always package an intact playable
   video; for URL imports move the helper-downloaded file into the song package
   so exactly one copy remains, while local-file imports preserve the user's
   source and copy it into the package.

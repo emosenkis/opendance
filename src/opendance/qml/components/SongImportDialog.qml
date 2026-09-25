@@ -67,7 +67,6 @@ Popup {
         trimEndField.text = "0"
         hiddenIntroField.text = "0"
         dancerCount.value = 1
-        copyVideo.checked = true
     }
 
     function begin() {
@@ -85,8 +84,7 @@ Popup {
             "dancer_count": dancerCount.value,
             "trim_start": trimStart,
             "trim_end": trimEnd,
-            "hide_video_intro": hiddenIntro,
-            "copy_video": copyVideo.checked
+            "hide_video_intro": hiddenIntro
         })
     }
 
@@ -322,15 +320,6 @@ Popup {
                 RowLayout {
                     Layout.fillWidth: true
                     visible: dialog.ready
-
-                    NeonSwitch {
-                        id: copyVideo
-                        Layout.fillWidth: true
-                        text: "COPY VIDEO INTO LIBRARY"
-                        description: "Keep this song playable if the original file moves"
-                        checked: true
-                        accent: "#55f7ff"
-                    }
 
                     NeonButton {
                         text: String(dialog.value("lyrics", "")).length ? "CHANGE LYRICS" : "LYRICS (.LRC)"

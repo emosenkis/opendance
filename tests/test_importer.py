@@ -253,7 +253,6 @@ command = ["specific-helper", "--safe"]
                 trim_start=1,
                 trim_end=2,
                 hide_video_intro=3,
-                copy_video=False,
             )
 
             def succeed(_video, destination, **_options):
@@ -279,7 +278,8 @@ command = ["specific-helper", "--safe"]
             )
             self.assertEqual(extract.call_args.kwargs["song_id"], "artist-title-3")
             self.assertEqual(extract.call_args.kwargs["dancer_count"], 6)
-            self.assertFalse(extract.call_args.kwargs["copy_video"])
+            self.assertTrue(extract.call_args.kwargs["copy_video"])
+            self.assertFalse(extract.call_args.kwargs["move_video"])
             self.assertEqual(extract.call_args.kwargs["trim_start"], 1)
             with self.assertRaisesRegex(ValueError, "between 1 and 6"):
                 extract_imported_song(

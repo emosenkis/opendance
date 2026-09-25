@@ -872,7 +872,9 @@ class Backend(QObject):
                     raise ValueError(f"video file does not exist: {path}")
                 details = probe_video_metadata(path)
                 if not self._song_import_cancel.is_set():
-                    self._import_prepared.emit({"source": str(path), **details})
+                    self._import_prepared.emit(
+                        {"source": str(path), "_downloaded": remote, **details}
+                    )
             except Exception as exc:
                 if not self._song_import_cancel.is_set():
                     self._import_failed.emit(str(exc))
@@ -930,9 +932,6 @@ class Backend(QObject):
         if self._song_import_busy or not source:
             return
         try:
-            copy_video = values.get("copy_video", True)
-            if not isinstance(copy_video, bool):
-                raise ValueError("copy video must be true or false")
             options = ImportOptions(
                 title=str(values.get("title", "")).strip(),
                 artist=str(values.get("artist", "")).strip(),
@@ -940,7 +939,6 @@ class Backend(QObject):
                 trim_start=float(values.get("trim_start", 0)),
                 trim_end=float(values.get("trim_end", 0)),
                 hide_video_intro=float(values.get("hide_video_intro", 0)),
-                copy_video=copy_video,
                 lrc=self._song_import.get("lyrics"),
             )
         except (TypeError, ValueError) as exc:

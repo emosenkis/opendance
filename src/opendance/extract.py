@@ -1050,6 +1050,7 @@ def extract_song(
     dancer_count: int | None = None,
     dancer_track_ids: Sequence[int] | None = None,
     copy_video: bool = False,
+    move_video: bool = False,
     trim_start: float = 0.0,
     trim_end: float = 0.0,
     hide_video_intro: float = 0.0,
@@ -1093,6 +1094,8 @@ def extract_song(
     trim_start = _seconds(trim_start, "trim start")
     trim_end = _seconds(trim_end, "trim end")
     hide_video_intro = _seconds(hide_video_intro, "hidden video intro")
+    if move_video and not copy_video:
+        raise ValueError("moving video into the package requires copy_video")
 
     destination = Path(output_dir)
     if destination.exists() and not destination.is_dir():
@@ -1173,8 +1176,13 @@ def extract_song(
     )
     representative_track_ids = [dancer["track_id"] for dancer in dancers]
     lead_track_id = representative_track_ids[lead_dancer_index]
+    moved_video = False
     if copy_video and not same_video:
-        _atomic_copy(video_path, copied_video)
+        if move_video:
+            shutil.move(video_path, copied_video)
+            moved_video = True
+        else:
+            _atomic_copy(video_path, copied_video)
     video_reference = video_path.name if copy_video else str(video_path.resolve())
     song = {
         "schema_version": 1,
@@ -1220,7 +1228,12 @@ def extract_song(
         },
         "extraction": analysis["processing"],
     }
-    _atomic_json(song_path, song)
+    try:
+        _atomic_json(song_path, song)
+    except Exception:
+        if moved_video and copied_video.exists() and not video_path.exists():
+            shutil.move(copied_video, video_path)
+        raise
     return song_path
 
 
