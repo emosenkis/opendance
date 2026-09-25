@@ -96,6 +96,8 @@ ones where they conflict.
 - [x] Detect players dynamically: start with any nonzero player count and allow
   joining, leaving, short-term re-identification, and returning mid-song without
   configuring a count in advance.
+- [ ] Allow the song/countdown to start before any live dancer has been detected;
+  players may step into view and join after playback has begun.
 - [x] Prevent a newly enrolled dancer from inheriting an expired player's
   score/combo.
 - [x] Extract choreography offline through the same pose implementation used at
@@ -154,6 +156,15 @@ ones where they conflict.
   the song/video audio and visual feedback. This supersedes the earlier request
   for frequent audible gameplay stingers.
 - [x] Stop judgement feedback from flickering/restarting invisibly.
+- [ ] Show at most one judgement per completed dance move (never several times a
+  second), with a minimum multi-second scoring window for legacy/unsegmented
+  choreography, and place feedback so it never obscures dancer identity, score,
+  assignment color, or upcoming-move information.
+- [ ] Size each feathered dancer marker from the horizontal distance between that
+  dancer's detected feet, smoothing width with the same dead-zone/slow-settle
+  behavior as position and clamping it above the gameplay progress bar. Remove
+  all numbered `P1`, `D1`, and `P1 -> D1` identity labels: assignment is color-
+  only, while any player names use stable adjective/verb-based nicknames.
 - [x] Use compressed Ogg for every tracked music/effect asset and remove WAV
   assets/references from the source tree.
 - [x] Rewrite the pre-publication Git history and garbage-collect it so the old
@@ -199,6 +210,15 @@ ones where they conflict.
   provide `URL`, and accept exactly one existing downloaded-file path on stdout.
   Surface malformed config, unsafe URLs, failures, timeouts, and invalid output
   in the import dialog.
+- [ ] Make the built-in yt-dlp helper select an H.264/AAC MP4 no larger than
+  1920x1080, never WebM/VP9/4K, and keep the final-path stdout contract.
+- [ ] Stream machine-readable yt-dlp download percentage, bytes, speed, and ETA
+  into the in-app import progress/status while preserving cancellation, timeout,
+  custom helper compatibility, and the final-path stdout contract.
+- [ ] While in-app pose extraction is running, replace the editable Add Song form
+  with the latest processed video frame and its detected pose overlay, refreshing
+  every 5–10 seconds without slowing the frame-analysis hot path; retain the
+  extraction percentage, frame count, processing FPS, ETA, and cancel-safe UI.
 - [x] Add three original, playable songs with deliberate dances whose move
   landings follow the actual beat grid. Two tracks may use the repository's
   sample-free deterministic synth; at least one must use a real generative-music
