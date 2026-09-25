@@ -117,7 +117,12 @@ command = ["specific-helper", "--safe"]
                 (
                     "yt-dlp",
                     "--no-playlist",
-                    "--no-progress",
+                    "--newline",
+                    "--progress",
+                    "--progress-delta",
+                    "0.5",
+                    "--progress-template",
+                    "download:opendance-progress:%(progress._default_template)s",
                     "-f",
                     "bestvideo[width<=1920][height<=1080][ext=mp4][vcodec^=vp09]+bestaudio[ext=m4a]/best[width<=1920][height<=1080][ext=mp4]",
                     "--merge-output-format",
@@ -130,6 +135,33 @@ command = ["specific-helper", "--safe"]
                     "https://a-site-supported-by-ytdlp.example/watch",
                 ),
             )
+
+    def test_url_helper_streams_progress_without_polluting_the_result_path(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            downloaded = root / "clip.mp4"
+            downloaded.touch()
+            script = (
+                "print('opendance-progress:25% of 8MiB at 2MiB/s ETA 00:03');"
+                f"print({str(downloaded)!r})"
+            )
+            config = root / "config.toml"
+            config.write_text(
+                "[[url_helpers]]\n"
+                'domains = ["example.com"]\n'
+                f"command = {json.dumps([sys.executable, '-c', script])}\n",
+                encoding="utf-8",
+            )
+            progress = []
+
+            result = download_url(
+                "https://example.com/watch",
+                config,
+                progress_callback=progress.append,
+            )
+
+            self.assertEqual(result, downloaded.resolve())
+            self.assertEqual(progress, ["25% of 8MiB at 2MiB/s ETA 00:03"])
 
     def test_url_helper_rejects_unsafe_url_and_bad_process_output(self):
         with TemporaryDirectory() as directory:

@@ -860,7 +860,11 @@ class Backend(QObject):
         def prepare() -> None:
             try:
                 path = (
-                    download_url(source, cancel_event=self._song_import_cancel)
+                    download_url(
+                        source,
+                        cancel_event=self._song_import_cancel,
+                        progress_callback=lambda status: self._import_progress.emit(status),
+                    )
                     if remote
                     else Path(source).resolve(strict=True)
                 )
@@ -1003,7 +1007,17 @@ class Backend(QObject):
         self.songImportChanged.emit()
 
     @Slot(object)
-    def _on_import_progress(self, progress: tuple[int, int | None, float]) -> None:
+    def _on_import_progress(self, progress: Any) -> None:
+        if isinstance(progress, str):
+            progress = " ".join(progress.split())
+            percent, _separator, _rest = progress.partition("%")
+            try:
+                self._song_import_progress = min(1.0, max(0.0, float(percent) / 100))
+            except ValueError:
+                self._song_import_progress = -1.0
+            self._song_import_status = "Downloading video: " + progress
+            self.songImportChanged.emit()
+            return
         done, total, fps = progress
         if total:
             self._song_import_progress = min(1.0, done / total)

@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 import tomllib
 import unicodedata
@@ -167,6 +168,7 @@ def download_url(
     *,
     timeout: float = URL_HELPER_TIMEOUT,
     cancel_event: Any | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> Path:
     """Run the configured argv with ``URL`` set and return its downloaded file."""
 
@@ -175,7 +177,7 @@ def download_url(
     try:
         if cancel_event is not None and cancel_event.is_set():
             raise InterruptedError("song import cancelled")
-        if cancel_event is None:
+        if cancel_event is None and progress_callback is None:
             result = subprocess.run(
                 command,
                 env=environment,
@@ -191,27 +193,62 @@ def download_url(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                bufsize=1,
             )
+            stdout: list[str] = []
+            stderr: list[str] = []
+
+            def read_stream(stream: Any, output: list[str], progress: bool = False) -> None:
+                for line in stream:
+                    if progress and line.startswith("opendance-progress:"):
+                        if progress_callback:
+                            progress_callback(line.removeprefix("opendance-progress:").strip())
+                    else:
+                        output.append(line)
+
+            readers = (
+                threading.Thread(
+                    target=read_stream,
+                    args=(process.stdout, stdout, True),
+                    daemon=True,
+                ),
+                threading.Thread(
+                    target=read_stream,
+                    args=(process.stderr, stderr),
+                    daemon=True,
+                ),
+            )
+            for reader in readers:
+                reader.start()
             deadline = time.monotonic() + timeout
-            while True:
-                try:
-                    stdout, stderr = process.communicate(
-                        timeout=max(0.01, min(0.25, deadline - time.monotonic()))
-                    )
+            interrupted = False
+            timed_out = False
+            while process.poll() is None:
+                interrupted = bool(cancel_event is not None and cancel_event.is_set())
+                timed_out = time.monotonic() >= deadline
+                if interrupted or timed_out:
+                    process.terminate()
                     break
+                try:
+                    process.wait(timeout=max(0.01, min(0.1, deadline - time.monotonic())))
                 except subprocess.TimeoutExpired:
-                    if cancel_event.is_set() or time.monotonic() >= deadline:
-                        process.terminate()
-                        try:
-                            process.wait(timeout=1)
-                        except subprocess.TimeoutExpired:
-                            process.kill()
-                        process.communicate()
-                        if cancel_event.is_set():
-                            raise InterruptedError("song import cancelled")
-                        raise subprocess.TimeoutExpired(command, timeout)
+                    pass
+            if interrupted or timed_out:
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            for reader in readers:
+                reader.join()
+            process.stdout.close()
+            process.stderr.close()
+            if interrupted:
+                raise InterruptedError("song import cancelled")
+            if timed_out:
+                raise subprocess.TimeoutExpired(command, timeout)
             result = subprocess.CompletedProcess(
-                command, process.returncode, stdout, stderr
+                command, process.returncode, "".join(stdout), "".join(stderr)
             )
     except InterruptedError:
         raise

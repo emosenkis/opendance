@@ -68,6 +68,10 @@ class SongImportBridgeTests(unittest.TestCase):
     def test_frame_progress_reports_percent_speed_and_eta(self):
         backend = backend_stub()
 
+        backend._on_import_progress(" 42.5% of 20.00MiB at 3.00MiB/s ETA 00:04")
+        self.assertEqual(backend._song_import_progress, 0.425)
+        self.assertIn("Downloading video: 42.5%", backend._song_import_status)
+
         backend._on_import_progress((250, 1_000, 25.0))
 
         self.assertEqual(backend._song_import_progress, 0.25)
