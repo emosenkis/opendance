@@ -187,6 +187,12 @@ ones where they conflict.
   when provided (otherwise a middle excerpt), honor media trims and hidden video
   intros, support embedded or separate audio, and stop immediately when the
   selection or screen changes.
+- [x] Remember fullscreen across launches alongside the existing persistent
+  settings. Show the song library as exactly two rows with no clipped edge
+  cards; navigate horizontally by complete columns, show every video song's
+  preview-start frame as its resting thumbnail, animate/audio-preview only the
+  selected song, and reserve the existing art placeholder for songs without
+  video.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 

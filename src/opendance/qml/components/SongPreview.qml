@@ -9,6 +9,7 @@ Item {
     required property int startMs
     required property int durationMs
     required property real outputVolume
+    property bool playing: true
     readonly property bool hasVideo: String(videoSource) !== ""
     readonly property bool separateAudio: hasVideo && String(audioSource) !== ""
     readonly property url primarySource: hasVideo ? videoSource : audioSource
@@ -21,12 +22,16 @@ Item {
     }
 
     function maybeStart() {
-        if (started || durationMs <= 0 || !loaded(primaryPlayer)
+        if (durationMs <= 0 || !loaded(primaryPlayer)
                 || (separateAudio && !loaded(audioPlayer)))
             return
-        started = true
+        if (started)
+            return
         primaryPlayer.position = startMs
         audioPlayer.position = startMs
+        if (!playing)
+            return
+        started = true
         primaryPlayer.play()
         if (separateAudio)
             audioPlayer.play()
@@ -37,6 +42,19 @@ Item {
         primaryPlayer.stop()
         audioPlayer.stop()
     }
+
+    function pauseAtPreview() {
+        envelope.stop()
+        primaryAudio.volume = 0
+        separateAudioOutput.volume = 0
+        primaryPlayer.pause()
+        audioPlayer.pause()
+        primaryPlayer.position = startMs
+        audioPlayer.position = startMs
+        started = false
+    }
+
+    onPlayingChanged: playing ? maybeStart() : pauseAtPreview()
 
     Component.onDestruction: stopPlayers()
 
@@ -104,6 +122,6 @@ Item {
                 duration: root.fadeMs
             }
         }
-        ScriptAction { script: root.stopPlayers() }
+        ScriptAction { script: root.pauseAtPreview() }
     }
 }

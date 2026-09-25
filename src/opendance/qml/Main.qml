@@ -32,6 +32,7 @@ ApplicationWindow {
                                                   || backend.songTime < backend.videoHiddenUntil)
     readonly property bool selectedSongLocked: itemValue(song, "locked", false)
                                                 || itemValue(song, "unlocked", true) === false
+    property bool windowStateReady: false
 
     function itemValue(item, name, fallback) {
         return item && item[name] !== undefined && item[name] !== null ? item[name] : fallback
@@ -129,7 +130,7 @@ ApplicationWindow {
         if (!songList.count)
             return
         songList.currentIndex = clamped(songList.currentIndex + delta, 0, songList.count - 1)
-        songList.positionViewAtIndex(songList.currentIndex, ListView.Contain)
+        songList.positionViewAtIndex(songList.currentIndex, GridView.Contain)
         backend.selectSong(songList.currentIndex)
     }
 
@@ -138,8 +139,20 @@ ApplicationWindow {
         if (songList.count > 0 && index >= 0 && index < songList.count
                 && songList.currentIndex !== index) {
             songList.currentIndex = index
-            songList.positionViewAtIndex(index, ListView.Contain)
+            songList.positionViewAtIndex(index, GridView.Contain)
         }
+    }
+
+    Component.onCompleted: {
+        windowStateReady = true
+        if (backend.fullscreen)
+            showFullScreen()
+        Qt.callLater(focusForScreen)
+    }
+
+    onVisibilityChanged: {
+        if (windowStateReady)
+            backend.rememberFullscreen(visibility === Window.FullScreen)
     }
 
     function goBack() {
@@ -183,9 +196,9 @@ ApplicationWindow {
         } else if (normalized === "accept" || normalized === "select" || normalized === "a") {
             activateFocused()
         } else if ((normalized === "left" || normalized === "dpad_left") && screenName === "library") {
-            moveSong(-1)
+            moveSong(-songList.rowCount)
         } else if ((normalized === "right" || normalized === "dpad_right") && screenName === "library") {
-            moveSong(1)
+            moveSong(songList.rowCount)
         } else if (normalized === "up" || normalized === "left" || normalized.indexOf("dpad_up") >= 0) {
             moveFocus(false)
         } else if (normalized === "down" || normalized === "right" || normalized.indexOf("dpad_down") >= 0) {
@@ -241,14 +254,14 @@ ApplicationWindow {
         sequence: "A"
         enabled: window.screenName === "library"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveSong(-1)
+        onActivated: window.moveSong(-songList.rowCount)
     }
 
     Shortcut {
         sequence: "D"
         enabled: window.screenName === "library"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveSong(1)
+        onActivated: window.moveSong(songList.rowCount)
     }
 
     Shortcut {
@@ -713,30 +726,40 @@ ApplicationWindow {
                     }
                 }
 
-                ListView {
+                GridView {
                     id: songList
 
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.minimumHeight: 300 * window.uiScale
                     model: backend.songs
-                    orientation: ListView.Horizontal
-                    spacing: 18 * window.uiScale
+                    readonly property int rowCount: 2
+                    readonly property int visibleColumns: Math.max(
+                                                                      1,
+                                                                      Math.floor(width / (245 * window.uiScale)))
+                    flow: GridView.FlowTopToBottom
+                    cellWidth: width / visibleColumns
+                    cellHeight: height / rowCount
                     clip: true
                     focus: true
                     keyNavigationWraps: false
                     boundsBehavior: Flickable.StopAtBounds
-                    snapMode: ListView.SnapToItem
+                    snapMode: GridView.SnapToRow
                     highlightMoveDuration: window.reducedMotion ? 0 : 220
-                    preferredHighlightBegin: width * 0.08
-                    preferredHighlightEnd: width * 0.76
-                    highlightRangeMode: ListView.ApplyRange
 
                     Keys.onLeftPressed: function(event) {
-                        window.moveSong(-1)
+                        window.moveSong(-rowCount)
                         event.accepted = true
                     }
                     Keys.onRightPressed: function(event) {
+                        window.moveSong(rowCount)
+                        event.accepted = true
+                    }
+                    Keys.onUpPressed: function(event) {
+                        window.moveSong(-1)
+                        event.accepted = true
+                    }
+                    Keys.onDownPressed: function(event) {
                         window.moveSong(1)
                         event.accepted = true
                     }
@@ -766,13 +789,13 @@ ApplicationWindow {
 
                         required property int index
                         required property var modelData
-                        readonly property bool selected: ListView.isCurrentItem
+                        readonly property bool selected: GridView.isCurrentItem
                         readonly property bool locked: window.itemValue(modelData, "locked", false)
                                                        || window.itemValue(modelData, "unlocked", true) === false
                         readonly property color accent: window.songAccent(modelData, index)
 
-                        width: Math.min(300 * window.uiScale, songList.width * 0.27)
-                        height: songList.height - 12 * window.uiScale
+                        width: songList.cellWidth - 12 * window.uiScale
+                        height: songList.cellHeight - 8 * window.uiScale
                         scale: selected ? 1.0 : 0.94
                         opacity: selected ? 1.0 : 0.72
 
@@ -797,12 +820,13 @@ ApplicationWindow {
 
                             Column {
                                 anchors.fill: parent
-                                anchors.margins: 12 * window.uiScale
-                                spacing: 9 * window.uiScale
+                                anchors.margins: 8 * window.uiScale
+                                spacing: 3 * window.uiScale
 
                                 Rectangle {
                                     width: parent.width
-                                    height: parent.height * 0.59
+                                    height: Math.max(54 * window.uiScale,
+                                                     parent.height - 61 * window.uiScale)
                                     radius: 13 * window.uiScale
                                     clip: true
                                     gradient: Gradient {
@@ -832,11 +856,11 @@ ApplicationWindow {
                                     Loader {
                                         id: previewLoader
                                         anchors.fill: parent
-                                        active: songDelegate.selected
-                                                && window.screenName === "library"
+                                        active: window.screenName === "library"
                                                 && previewDuration > 0
                                                 && (String(previewVideo) !== ""
-                                                    || String(previewAudio) !== "")
+                                                    || (songDelegate.selected
+                                                        && String(previewAudio) !== ""))
                                         readonly property url previewVideo: window.itemValue(
                                                                  songDelegate.modelData,
                                                                  "previewVideoUrl", "")
@@ -857,14 +881,14 @@ ApplicationWindow {
                                                 startMs: previewLoader.previewStart
                                                 durationMs: previewLoader.previewDuration
                                                 outputVolume: backend.volume
+                                                playing: songDelegate.selected
                                             }
                                         }
                                     }
 
                                     Label {
                                         anchors.centerIn: parent
-                                        visible: !previewLoader.active
-                                                 || String(previewLoader.previewVideo) === ""
+                                        visible: String(previewLoader.previewVideo) === ""
                                         text: songDelegate.locked ? "\u26BF" : "\u266B"
                                         color: songDelegate.locked ? "#d4d9e5" : "#ffffff"
                                         font.pixelSize: 76 * window.uiScale
@@ -876,7 +900,7 @@ ApplicationWindow {
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         anchors.bottom: parent.bottom
-                                        height: 34 * window.uiScale
+                                        height: 24 * window.uiScale
                                         color: "#a5070912"
 
                                         Row {
@@ -887,8 +911,8 @@ ApplicationWindow {
                                                 model: 4
                                                 Rectangle {
                                                     required property int index
-                                                    width: 18 * window.uiScale
-                                                    height: 4 + index * 4 * window.uiScale
+                                                    width: 14 * window.uiScale
+                                                    height: 3 + index * 3 * window.uiScale
                                                     radius: 2
                                                     color: index < Number(window.itemValue(songDelegate.modelData,
                                                                                            "difficulty", 2))
@@ -904,7 +928,7 @@ ApplicationWindow {
                                     width: parent.width
                                     text: window.itemValue(songDelegate.modelData, "title", "Untitled Groove")
                                     color: "#ffffff"
-                                    font.pixelSize: 19 * window.uiScale
+                                    font.pixelSize: 15 * window.uiScale
                                     font.weight: Font.Black
                                     elide: Text.ElideRight
                                 }
@@ -913,7 +937,7 @@ ApplicationWindow {
                                     width: parent.width
                                     text: window.itemValue(songDelegate.modelData, "artist", "OpenDance Crew")
                                     color: "#a2aec3"
-                                    font.pixelSize: 12 * window.uiScale
+                                    font.pixelSize: 10 * window.uiScale
                                     elide: Text.ElideRight
                                 }
 
@@ -922,7 +946,7 @@ ApplicationWindow {
 
                                     StarMeter {
                                         value: window.itemValue(songDelegate.modelData, "bestStars", 0)
-                                        starSize: 14 * window.uiScale
+                                        starSize: 11 * window.uiScale
                                         accent: songDelegate.accent
                                         animateChanges: false
                                     }
@@ -2389,5 +2413,4 @@ ApplicationWindow {
         }
     }
 
-    Component.onCompleted: Qt.callLater(focusForScreen)
 }

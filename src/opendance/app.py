@@ -454,6 +454,7 @@ class Backend(QObject):
         self._reduced_motion = self.settings.value(
             "ui/reduced_motion", False, type=bool
         )
+        self._fullscreen = self.settings.value("ui/fullscreen", False, type=bool)
         self._max_players = MAX_PLAYERS
         self._gestures = GestureController(
             join_required=(
@@ -1411,6 +1412,15 @@ class Backend(QObject):
     @Slot()
     def requestFullscreen(self) -> None:
         self.fullscreenRequested.emit()
+
+    @Property(bool, notify=changed)
+    def fullscreen(self) -> bool:
+        return self._fullscreen
+
+    @Slot(bool)
+    def rememberFullscreen(self, fullscreen: bool) -> None:
+        self._fullscreen = bool(fullscreen)
+        self.settings.setValue("ui/fullscreen", self._fullscreen)
 
     @Slot()
     def _capture_frame(self, frame: Any) -> None:

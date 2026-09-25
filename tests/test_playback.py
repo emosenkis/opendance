@@ -77,6 +77,28 @@ class PlaybackPolicyTest(unittest.TestCase):
             self.assertEqual(preview["previewStartMs"], 14_000)
             self.assertEqual(preview["previewDurationMs"], 8_000)
 
+    def test_fullscreen_preference_is_persisted(self):
+        backend = Backend.__new__(Backend)
+        backend.settings = SimpleNamespace(setValue=Mock())
+
+        backend.rememberFullscreen(True)
+
+        self.assertTrue(backend.fullscreen)
+        backend.settings.setValue.assert_called_once_with("ui/fullscreen", True)
+
+    def test_library_uses_two_complete_columns_and_video_thumbnails(self):
+        qml = files("opendance").joinpath("qml/Main.qml").read_text()
+        preview = files("opendance").joinpath(
+            "qml/components/SongPreview.qml"
+        ).read_text()
+
+        self.assertIn("GridView {\n                    id: songList", qml)
+        self.assertIn("readonly property int rowCount: 2", qml)
+        self.assertIn("cellWidth: width / visibleColumns", qml)
+        self.assertIn("playing: songDelegate.selected", qml)
+        self.assertIn('visible: String(previewLoader.previewVideo) === ""', qml)
+        self.assertIn("primaryPlayer.position = startMs", preview)
+
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)
 
