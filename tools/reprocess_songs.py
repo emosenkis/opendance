@@ -18,6 +18,7 @@ from opendance.extract import (
     _build_move_scoring,
     _record_tracks,
     _role_timeline,
+    _stitch_track_fragments,
 )
 
 
@@ -68,6 +69,7 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
     if rerole:
         track_stats = {}
         try:
+            timeline = _stitch_track_fragments(timeline)
             for frame in timeline:
                 _record_tracks(track_stats, frame.get("people", []))
             seeds = [

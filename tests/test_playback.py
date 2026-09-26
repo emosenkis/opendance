@@ -104,6 +104,10 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertIn("active: songDelegate.selected", qml)
         self.assertNotIn("property bool playing", preview)
 
+        hud = files("opendance").joinpath("qml/components/PlayerHud.qml").read_text()
+        self.assertIn('source: root.value("face", "")', hud)
+        self.assertIn("fillMode: Image.PreserveAspectCrop", hud)
+
     def test_video_thumbnail_is_extracted_once_then_reused(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

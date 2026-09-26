@@ -35,6 +35,16 @@ GlassPanel {
                    : "#202638"
             border.width: 2
             border.color: root.player ? root.playerColor : "#555e72"
+            clip: true
+
+            Image {
+                anchors.fill: parent
+                source: root.value("face", "")
+                visible: String(source) !== ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                cache: false
+            }
 
             SequentialAnimation on scale {
                 running: !!root.player && !root.reducedMotion

@@ -37,7 +37,7 @@ _SCENE_CUT_DELTA = 0.12
 _ROLE_DISCONTINUITY = 0.72
 _ROLE_JUMP_MARGIN = 0.08
 _ROLE_MAX_SPEED = 0.8
-ROLE_ASSIGNMENT_METHOD = "track_id_with_spatial_shuffle_guard"
+ROLE_ASSIGNMENT_METHOD = "bidirectional_track_stitch_with_spatial_shuffle_guard"
 MOVE_SCORING_SCHEMA_VERSION = 1
 MOVE_SCORING_FEATURE = "coco17-motion-v1"
 MOVE_SCORING_PHASES = 12
@@ -156,7 +156,7 @@ def _video_timestamp(
 
 
 def _record_tracks(
-    stats: dict[int, dict[str, float]], people: list[dict[str, Any]]
+    stats: dict[int, dict[str, Any]], people: list[dict[str, Any]]
 ) -> None:
     for person in people:
         track_id = person.get("track_id")
@@ -172,6 +172,9 @@ def _record_tracks(
                 "center": 0.0,
                 "x": 0.0,
                 "visible": 0.0,
+                "motion": 0.0,
+                "motion_frames": 0.0,
+                "last_keypoints": None,
             },
         )
         item["frames"] += 1
@@ -179,13 +182,25 @@ def _record_tracks(
         item["center"] += abs(bbox[0] + bbox[2] / 2 - 0.5)
         item["x"] += bbox[0] + bbox[2] / 2
         item["visible"] += sum(point[2] >= 0.25 for point in keypoints)
+        previous = item.get("last_keypoints")
+        if previous is not None:
+            try:
+                item["motion"] += 1.0 - pose_similarity(
+                    keypoints, previous, allow_mirror=False
+                )
+                item["motion_frames"] += 1
+            except (TypeError, ValueError):
+                pass
+        item["last_keypoints"] = keypoints
 
 
-def _rank_tracks(stats: dict[int, dict[str, float]]) -> list[int]:
-    def rank(item: tuple[int, dict[str, float]]) -> tuple[float, float, float, float, int]:
+def _rank_tracks(stats: dict[int, dict[str, Any]]) -> list[int]:
+    def rank(item: tuple[int, dict[str, Any]]) -> tuple[float, float, float, float, float, int]:
         track_id, values = item
         frames = values["frames"]
+        activity = values.get("motion", 0.0) / max(1.0, values.get("motion_frames", 0.0))
         return (
+            frames * (0.35 + min(1.0, activity * 8.0)),
             frames,
             values["visible"] / frames,
             -values["center"] / frames,
@@ -196,13 +211,13 @@ def _rank_tracks(stats: dict[int, dict[str, float]]) -> list[int]:
     return [track_id for track_id, _ in sorted(stats.items(), key=rank, reverse=True)]
 
 
-def _choose_lead(stats: dict[int, dict[str, float]]) -> int | None:
+def _choose_lead(stats: dict[int, dict[str, Any]]) -> int | None:
     ranked = _rank_tracks(stats)
     return ranked[0] if ranked else None
 
 
 def _validate_dancer_request(
-    stats: dict[int, dict[str, float]],
+    stats: dict[int, dict[str, Any]],
     dancer_count: int | None,
     requested_track_ids: Sequence[int] | None,
 ) -> tuple[int, list[int]]:
@@ -318,11 +333,98 @@ def _best_role_assignment(
     return best[2], best[0] / count
 
 
+def _stitch_track_fragments(
+    frames: Sequence[dict[str, Any]], protected: Sequence[int] = ()
+) -> list[dict[str, Any]]:
+    """Join non-overlapping tracker fragments using evidence from both ends."""
+
+    fragments: dict[int, dict[str, Any]] = {}
+    for frame_index, frame in enumerate(frames):
+        timestamp = float(frame.get("timestamp_ms", 0.0)) / 1000.0
+        for person in frame.get("people", ()):
+            if person.get("track_id") is None:
+                continue
+            track_id = int(person["track_id"])
+            fragment = fragments.setdefault(
+                track_id,
+                {
+                    "first_index": frame_index,
+                    "last_index": frame_index,
+                    "first_time": timestamp,
+                    "last_time": timestamp,
+                    "first": person,
+                    "last": person,
+                },
+            )
+            fragment.update(
+                last_index=frame_index,
+                last_time=timestamp,
+                last=person,
+            )
+
+    protected_ids = {int(track_id) for track_id in protected}
+    cut_prefix = [0]
+    for frame in frames:
+        cut_prefix.append(cut_prefix[-1] + int(bool(frame.get("scene_cut"))))
+    candidates = []
+    for earlier_id, earlier in fragments.items():
+        for later_id, later in fragments.items():
+            gap = later["first_time"] - earlier["last_time"]
+            if (
+                earlier_id == later_id
+                or earlier_id in protected_ids
+                or later_id in protected_ids
+                or not 0.0 < gap <= 3.0
+                or earlier["last_index"] >= later["first_index"]
+                or cut_prefix[later["first_index"] + 1]
+                > cut_prefix[earlier["last_index"] + 1]
+            ):
+                continue
+            cost = _role_cost(later["first"], 0, 1, earlier["last"])
+            if cost <= 0.58:
+                candidates.append((cost + gap * 0.03, earlier_id, later_id))
+
+    parent = {track_id: track_id for track_id in fragments}
+
+    def root(track_id: int) -> int:
+        while parent[track_id] != track_id:
+            parent[track_id] = parent[parent[track_id]]
+            track_id = parent[track_id]
+        return track_id
+
+    claimed_later: set[int] = set()
+    claimed_earlier: set[int] = set()
+    for _, earlier_id, later_id in sorted(candidates):
+        earlier_root, later_root = root(earlier_id), root(later_id)
+        if (
+            earlier_root == later_root
+            or earlier_id in claimed_earlier
+            or later_root in claimed_later
+        ):
+            continue
+        parent[later_root] = earlier_root
+        claimed_later.add(later_root)
+        claimed_earlier.add(earlier_id)
+
+    result = []
+    for source_frame in frames:
+        frame = dict(source_frame)
+        people = []
+        for source_person in source_frame.get("people", ()):
+            person = dict(source_person)
+            if person.get("track_id") is not None:
+                person["track_id"] = root(int(person["track_id"]))
+            people.append(person)
+        frame["people"] = people
+        result.append(frame)
+    return result
+
+
 def _role_timeline(
     frames: Sequence[dict[str, Any]],
     dancer_count: int,
     seed_track_ids: Sequence[int],
-    track_stats: dict[int, dict[str, float]],
+    track_stats: dict[int, dict[str, Any]],
     smooth_frames: int = 3,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
     canonical = [(index + 0.5) / dancer_count for index in range(dancer_count)]
@@ -976,7 +1078,7 @@ def analyze_video(
     duration_ms = last_timestamp_ms + frame_duration_ms
     if reported_frames and fps:
         duration_ms = max(duration_ms, reported_frames * 1000.0 / fps)
-    track_stats: dict[int, dict[str, float]] = {}
+    track_stats: dict[int, dict[str, Any]] = {}
     for frame in timeline:
         _record_tracks(track_stats, frame["people"])
     elapsed = time.perf_counter() - started
@@ -1150,6 +1252,7 @@ def extract_song(
         frames.append(frame)
     if not frames:
         raise RuntimeError("trimmed video contains no frames available for choreography")
+    frames = _stitch_track_fragments(frames, dancer_track_ids or ())
     analysis["frames"] = frames
     source = dict(analysis["source"])
     source.update(
@@ -1163,7 +1266,7 @@ def extract_song(
         }
     )
     analysis["source"] = source
-    track_stats: dict[int, dict[str, float]] = {}
+    track_stats: dict[int, dict[str, Any]] = {}
     for frame in frames:
         _record_tracks(track_stats, frame["people"])
     analysis["_track_stats"] = track_stats

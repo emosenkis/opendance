@@ -130,6 +130,22 @@ class GameCoreTest(unittest.TestCase):
         self.assertEqual(slots.slots[0].track_id, 33)
         self.assertEqual(slots.slots[0].joined_at, joined_at)
 
+    def test_appearance_rebinds_a_returning_player_without_stealing_a_slot(self):
+        slots = PlayerSlots(max_players=2, leave_after=0.5, rebind_seconds=4.0)
+        red, blue = [1.0, 0.0], [0.0, 1.0]
+        slots.update({11: shifted("ready", -0.2)}, 0.0, {11: red})
+        joined_at = slots.slots[0].joined_at
+        slots.update({}, 0.8)
+
+        slots.update({22: shifted("ready", 0.25)}, 1.0, {22: red})
+        self.assertEqual(slots.slots[0].track_id, 22)
+        self.assertEqual(slots.slots[0].joined_at, joined_at)
+
+        slots.update({}, 1.8)
+        slots.update({33: shifted("ready", 0.25)}, 2.0, {33: blue})
+        self.assertNotEqual(slots.slots[0].track_id, 33)
+        self.assertEqual(slots.slots[1].track_id, 33)
+
     def test_new_player_does_not_inherit_an_expired_slots_score(self):
         song = {
             "id": "handoff",

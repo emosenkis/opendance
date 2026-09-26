@@ -206,7 +206,7 @@ ones where they conflict.
 - [x] Keep the selected/default camera running while entering pre-game setup;
   refreshing the device list must not immediately tear down and recreate the
   same live camera after its first frame.
-- [ ] Overhaul player/dancer identity continuity. For offline extraction, reject
+- [x] Overhaul player/dancer identity continuity. For offline extraction, reject
   stationary/background bystanders as authored dancers and use bidirectional
   whole-video evidence: when a dancer disappears and later returns, associate
   the returning identity first, then propagate that association backward to the
@@ -219,6 +219,12 @@ ones where they conflict.
   strong. Capture the first good face-forward crop for every joined player and
   show it beside their nickname at the top of the gameplay screen, including
   players who join or return mid-song.
+- [ ] Next priority: use research on human/logical choreography versus detected
+  pose time series to cluster repeated occurrences of the same move into one
+  reusable definition with identical scoring and cues. Evaluate phase-aligned
+  motion features, distinctive still/key poses, and arrows on the one to three
+  most important moving body parts so automatically derived cues remain useful
+  to a human learning and copying the dance.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 

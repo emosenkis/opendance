@@ -11,7 +11,10 @@ import weakref
 
 from opendance.extract import (
     _build_move_scoring,
+    _rank_tracks,
+    _record_tracks,
     _role_timeline,
+    _stitch_track_fragments,
     analyze_video,
     extract_song,
 )
@@ -64,6 +67,27 @@ def assigned_timeline(frames):
 
 
 class MultiDancerTest(unittest.TestCase):
+    def test_bidirectional_stitch_relabels_a_returning_track_from_its_first_frame(self):
+        frames = [
+            {"timestamp_ms": 0, "people": [person(1, "ready", -0.2, [0.1, 0.1, 0.3, 0.8])]},
+            {"timestamp_ms": 500, "people": []},
+            {"timestamp_ms": 1_000, "people": [person(9, "ready", -0.19, [0.11, 0.1, 0.3, 0.8])]},
+            {"timestamp_ms": 1_500, "people": [person(9, "clap", -0.18, [0.12, 0.1, 0.3, 0.8])]},
+        ]
+
+        stitched = _stitch_track_fragments(frames)
+
+        self.assertEqual(stitched[2]["people"][0]["track_id"], 1)
+        self.assertEqual(stitched[3]["people"][0]["track_id"], 1)
+
+    def test_active_dancer_ranks_above_longer_stationary_bystander(self):
+        stats = {}
+        for _ in range(12):
+            _record_tracks(stats, [person(50, "ready", 0, [0.4, 0.2, 0.15, 0.4])])
+        for name in ("ready", "clap", "star", "ready", "clap", "star", "ready", "clap"):
+            _record_tracks(stats, [person(7, name, 0, [0.2, 0.05, 0.5, 0.9])])
+
+        self.assertEqual(_rank_tracks(stats)[0], 7)
     def test_scene_cut_rebinds_recycled_ids_by_location(self):
         frames = [
             {

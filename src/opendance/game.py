@@ -987,6 +987,7 @@ class PlayerSlot:
     joined_at: float | None = None
     visible: bool = False
     active: bool = False
+    fingerprint: tuple[float, ...] | None = None
 
     @property
     def player_number(self) -> int:
@@ -1030,7 +1031,14 @@ class PlayerSlots:
         for index, slot in enumerate(self.slots):
             self.slots[index] = PlayerSlot(index)
 
-    def _bind(self, slot: PlayerSlot, track_id: TrackId, pose: Pose, now: float) -> None:
+    def _bind(
+        self,
+        slot: PlayerSlot,
+        track_id: TrackId,
+        pose: Pose,
+        now: float,
+        fingerprint: Sequence[float] | None = None,
+    ) -> None:
         if slot.joined_at is None:
             slot.joined_at = now
         slot.track_id = track_id
@@ -1038,8 +1046,23 @@ class PlayerSlots:
         slot.last_seen = now
         slot.visible = True
         slot.active = True
+        if fingerprint:
+            incoming = tuple(float(value) for value in fingerprint)
+            slot.fingerprint = (
+                incoming
+                if slot.fingerprint is None or len(slot.fingerprint) != len(incoming)
+                else tuple(
+                    old * 0.85 + new * 0.15
+                    for old, new in zip(slot.fingerprint, incoming)
+                )
+            )
 
-    def update(self, tracks: Mapping[TrackId, Sequence], now: float) -> list[PlayerSlot]:
+    def update(
+        self,
+        tracks: Mapping[TrackId, Sequence],
+        now: float,
+        fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
+    ) -> list[PlayerSlot]:
         """Update bindings and return currently active slots in player order.
 
         Existing tracker ids always win, so players can cross on screen without
@@ -1048,6 +1071,7 @@ class PlayerSlots:
         """
 
         timestamp = float(now)
+        fingerprints = fingerprints or {}
         incoming = {track_id: _coerce_pose(pose) for track_id, pose in tracks.items()}
         for slot in self.slots:
             slot.visible = False
@@ -1055,7 +1079,13 @@ class PlayerSlots:
         unmatched = dict(incoming)
         for slot in self.slots:
             if slot.track_id in unmatched:
-                self._bind(slot, slot.track_id, unmatched.pop(slot.track_id), timestamp)
+                self._bind(
+                    slot,
+                    slot.track_id,
+                    unmatched.pop(slot.track_id),
+                    timestamp,
+                    fingerprints.get(slot.track_id),
+                )
 
         # Greedily match new ids to nearby recently-lost slots.
         possible: list[tuple[float, int, TrackId]] = []
@@ -1066,14 +1096,31 @@ class PlayerSlots:
                 if slot.visible or slot.pose is None or not 0.0 <= age <= self.rebind_seconds:
                     continue
                 distance = math.dist(center, slot.center)
-                if distance <= self.rebind_distance:
+                fingerprint = fingerprints.get(track_id)
+                appearance = None
+                if fingerprint and slot.fingerprint and len(fingerprint) == len(slot.fingerprint):
+                    appearance = math.sqrt(
+                        sum(
+                            (float(left) - right) ** 2
+                            for left, right in zip(fingerprint, slot.fingerprint)
+                        )
+                    )
+                if appearance is not None and appearance <= 0.45 and distance <= 0.75:
+                    possible.append((distance + appearance * 1.5, slot.index, track_id))
+                elif appearance is None and distance <= self.rebind_distance:
                     possible.append((distance, slot.index, track_id))
         claimed_slots: set[int] = set()
         claimed_tracks: set[TrackId] = set()
         for _, slot_index, track_id in sorted(possible, key=lambda item: item[0]):
             if slot_index in claimed_slots or track_id in claimed_tracks:
                 continue
-            self._bind(self.slots[slot_index], track_id, unmatched[track_id], timestamp)
+            self._bind(
+                self.slots[slot_index],
+                track_id,
+                unmatched[track_id],
+                timestamp,
+                fingerprints.get(track_id),
+            )
             claimed_slots.add(slot_index)
             claimed_tracks.add(track_id)
         for track_id in claimed_tracks:
@@ -1088,16 +1135,9 @@ class PlayerSlots:
                 slot.joined_at = None
         for track_id, pose in unmatched.items():
             free = next((slot for slot in self.slots if slot.track_id is None and not slot.visible), None)
-            if free is None:
-                departed = [
-                    slot
-                    for slot in self.slots
-                    if not slot.visible and timestamp - slot.last_seen > self.leave_after
-                ]
-                free = min(departed, key=lambda slot: slot.last_seen, default=None)
             if free is not None:
                 free.joined_at = timestamp
-                self._bind(free, track_id, pose, timestamp)
+                self._bind(free, track_id, pose, timestamp, fingerprints.get(track_id))
 
         for slot in self.slots:
             slot.active = slot.visible or timestamp - slot.last_seen <= self.leave_after
@@ -1336,7 +1376,12 @@ class GameSession:
             players.append(player)
         return players
 
-    def update(self, time_s: float, tracks: Mapping[TrackId, Sequence]) -> list[MoveFeedback]:
+    def update(
+        self,
+        time_s: float,
+        tracks: Mapping[TrackId, Sequence],
+        fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
+    ) -> list[MoveFeedback]:
         """Update players and judge every move cue crossed since the last frame.
 
         Only players visible on a cue receive a score and a possible-points entry;
@@ -1347,7 +1392,7 @@ class GameSession:
         previous_joins = {
             slot.index: slot.joined_at for slot in self.player_slots.slots
         }
-        self.player_slots.update(tracks, now)
+        self.player_slots.update(tracks, now, fingerprints)
         for slot in self.player_slots.active_slots:
             if slot.joined_at != previous_joins[slot.index]:
                 self.scores[slot.index] = PlayerScore(slot.index)

@@ -274,6 +274,53 @@ def _interpolated_media_time(
     return position_s + max(0.0, now - updated_at) if playing and updated_at is not None else position_s
 
 
+def _appearance_from_frame(frame: Any, person: dict[str, Any]) -> tuple[list[float], str]:
+    """Build an in-memory clothing fingerprint and optional face-forward crop."""
+
+    import cv2
+    import numpy as np
+
+    height, width = frame.shape[:2]
+    left, top, box_width, box_height = person.get("bbox", (0, 0, 0, 0))
+    x1 = max(0, min(width, round(float(left) * width)))
+    x2 = max(x1, min(width, round((float(left) + float(box_width)) * width)))
+    y1 = max(0, min(height, round((float(top) + 0.12 * float(box_height)) * height)))
+    y2 = max(y1, min(height, round((float(top) + 0.62 * float(box_height)) * height)))
+    torso = frame[y1:y2, x1:x2]
+    descriptor: list[float] = []
+    if torso.size:
+        hsv = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
+        for channel, maximum in ((0, 180), (1, 256), (2, 256)):
+            histogram, _ = np.histogram(hsv[:, :, channel], bins=8, range=(0, maximum))
+            values = histogram.astype(float)
+            total = float(values.sum()) or 1.0
+            descriptor.extend((values / total).tolist())
+
+    face = ""
+    points = person.get("keypoints", ())
+    if len(points) >= 5 and all(len(points[index]) >= 3 for index in (0, 1, 2)):
+        nose, left_eye, right_eye = (points[index] for index in (0, 1, 2))
+        eye_distance = abs(float(left_eye[0]) - float(right_eye[0]))
+        if min(float(nose[2]), float(left_eye[2]), float(right_eye[2])) >= 0.55 and eye_distance >= 0.012:
+            center_x = (float(left_eye[0]) + float(right_eye[0]) + float(nose[0])) / 3
+            center_y = (float(left_eye[1]) + float(right_eye[1])) / 2 + eye_distance * 0.55
+            size = max(eye_distance * 3.6, float(box_width) * 0.24)
+            fx1 = max(0, round((center_x - size / 2) * width))
+            fx2 = min(width, round((center_x + size / 2) * width))
+            fy1 = max(0, round((center_y - size * 0.55) * height))
+            fy2 = min(height, round((center_y + size * 0.45) * height))
+            crop = frame[fy1:fy2, fx1:fx2]
+            if crop.shape[0] >= 20 and crop.shape[1] >= 20:
+                encoded, jpeg = cv2.imencode(
+                    ".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 78]
+                )
+                if encoded:
+                    face = "data:image/jpeg;base64," + base64.b64encode(
+                        jpeg.tobytes()
+                    ).decode("ascii")
+    return descriptor, face
+
+
 class PoseThread(threading.Thread):
     """Runs inference on only the newest frame so latency cannot accumulate."""
 
@@ -285,6 +332,7 @@ class PoseThread(threading.Thread):
         self.reset_event = threading.Event()
         self.engine: Any = None
         self._reported_device = False
+        self._face_tracks: set[Any] = set()
 
     def submit(self, image: QImage, captured_ms: float) -> None:
         while True:
@@ -331,6 +379,14 @@ class PoseThread(threading.Thread):
                 frame = np.frombuffer(bgr.constBits(), dtype=np.uint8, count=stride * height)
                 frame = frame.reshape(height, stride)[:, : width * 3].reshape(height, width, 3).copy()
                 result = self.engine.infer(frame, captured_ms=captured_ms)
+                for person in result.get("people", ()):
+                    descriptor, face = _appearance_from_frame(frame, person)
+                    if descriptor:
+                        person["appearance"] = descriptor
+                    track_id = person.get("track_id")
+                    if face and track_id not in self._face_tracks:
+                        person["face"] = face
+                        self._face_tracks.add(track_id)
                 if not self._reported_device:
                     print(
                         f"OpenDance pose: {result.get('device', 'unknown')} "
@@ -348,6 +404,7 @@ class PoseThread(threading.Thread):
 
     def reset(self) -> None:
         self.reset_event.set()
+        self._face_tracks.clear()
         while not self.frames.empty():
             try:
                 self.frames.get_nowait()
@@ -543,6 +600,7 @@ class Backend(QObject):
         self._pose_people: list[dict[str, Any]] = []
         self._target_pose: list[list[float]] = []
         self._players: list[dict[str, Any]] = []
+        self._player_faces: dict[int, str] = {}
         self._feedback: list[dict[str, Any]] = []
         self._last_feedback_at = -math.inf
         self._result: dict[str, Any] = {}
@@ -1374,6 +1432,7 @@ class Backend(QObject):
             mirror_player_positions=self._selected_source != "demo",
         )
         self._feedback = []
+        self._player_faces = {}
         self._last_feedback_at = -math.inf
         self.feedbackChanged.emit()
         self._result = {}
@@ -1809,8 +1868,19 @@ class Backend(QObject):
                 if self._gestures.admits(person.get("track_id"))
             }
         )
+        fingerprints = {
+            int(person["track_id"]): person["appearance"]
+            for person in self._pose_people
+            if person.get("track_id") is not None and person.get("appearance")
+        }
         scoring_time = max(0.0, self._song_time - self._latency_ms / 1000.0)
-        new_feedback = self._session.update(scoring_time, tracks)
+        new_feedback = self._session.update(scoring_time, tracks, fingerprints)
+        for person in self._pose_people:
+            if not person.get("face") or person.get("track_id") is None:
+                continue
+            slot = self._session.player_slots.slot_for_track(int(person["track_id"]))
+            if slot is not None:
+                self._player_faces.setdefault(slot.index, person["face"])
         if new_feedback and _feedback_due(self._song_time, self._last_feedback_at):
             self._feedback = [
                 item if isinstance(item, dict) else vars(item) for item in new_feedback
@@ -1818,6 +1888,9 @@ class Backend(QObject):
             self._last_feedback_at = self._song_time
             self.feedbackChanged.emit()
         players = self._session.ui_players()
+        for player in players:
+            if face := self._player_faces.get(int(player["slot"])):
+                player["face"] = face
         if players != self._players:
             self._players = players
             self.playersChanged.emit()
