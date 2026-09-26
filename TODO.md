@@ -197,6 +197,28 @@ ones where they conflict.
   preview start rather than live video players. In the two-row grid, keep
   left/right on the same row and up/down in the same column, including gamepad
   navigation and incomplete final columns.
+- [x] Inhibit display blanking and automatic system sleep during countdown and
+  active gameplay, releasing the inhibition on results/exit.
+- [x] When the app becomes active after suspend, restart the camera or file
+  input, seek coach video/audio back to the current choreography time, resume
+  playback, and reset monotonic clock anchors so sleep time is not counted as
+  dance time.
+- [x] Keep the selected/default camera running while entering pre-game setup;
+  refreshing the device list must not immediately tear down and recreate the
+  same live camera after its first frame.
+- [ ] Overhaul player/dancer identity continuity. For offline extraction, reject
+  stationary/background bystanders as authored dancers and use bidirectional
+  whole-video evidence: when a dancer disappears and later returns, associate
+  the returning identity first, then propagate that association backward to the
+  first frame of its temporary/new track instead of permanently swapping roles.
+  Preserve legitimate crossings while preventing role changes caused by brief
+  occlusion, shot cuts, tracker resets, or spatial reshuffles. During live play,
+  combine pose/motion/location continuity with an in-memory, non-persistent face
+  or appearance fingerprint; never casually give a lost player's slot/name to a
+  newcomer, and reassociate a mid-song return to a lost slot when evidence is
+  strong. Capture the first good face-forward crop for every joined player and
+  show it beside their nickname at the top of the gameplay screen, including
+  players who join or return mid-song.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 

@@ -26,6 +26,7 @@ from PySide6.QtCore import (
     QUrl,
     Signal,
     Slot,
+    Qt,
 )
 from PySide6.QtGui import QIcon, QImage
 from PySide6.QtMultimedia import (
@@ -62,6 +63,55 @@ from .vision import GestureController
 
 MAX_PLAYERS = 6
 FEEDBACK_INTERVAL_SECONDS = 2.0
+
+
+class SleepInhibitor:
+    """Keep the display and system awake only while a dance is active."""
+
+    def __init__(self) -> None:
+        self._process: subprocess.Popen[bytes] | None = None
+        self._windows_active = False
+
+    def acquire(self) -> None:
+        if self._process or self._windows_active:
+            return
+        if sys.platform == "win32":
+            import ctypes
+
+            continuous = 0x80000000
+            system_required = 0x00000001
+            display_required = 0x00000002
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                continuous | system_required | display_required
+            )
+            self._windows_active = True
+        elif sys.platform.startswith("linux") and shutil.which("systemd-inhibit"):
+            try:
+                self._process = subprocess.Popen(
+                    [
+                        "systemd-inhibit",
+                        "--what=idle:sleep",
+                        "--who=OpenDance",
+                        "--why=Dance game in progress",
+                        "--mode=block",
+                        "sleep",
+                        "infinity",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError:
+                self._process = None
+
+    def release(self) -> None:
+        if self._process:
+            self._process.terminate()
+            self._process = None
+        if self._windows_active:
+            import ctypes
+
+            ctypes.windll.kernel32.SetThreadExecutionState(0x80000000)
+            self._windows_active = False
 
 
 def _enabled(value: Any) -> bool:
@@ -417,6 +467,8 @@ class Backend(QObject):
         self._presentation_mode = presentation_song is not None
         self._presentation_video = bool(presentation_video)
         self._presentation_finished = False
+        self._sleep_inhibitor = SleepInhibitor()
+        self._inactive_at: float | None = None
         self._screen = "game" if self._presentation_mode else "library"
         self._settings_return_screen = "library"
         self._catalog = [dict(presentation_song)] if presentation_song else self._load_songs()
@@ -892,7 +944,6 @@ class Backend(QObject):
         self._screen = "setup"
         self._song_time = 0.0
         self.refreshCameras()
-        self._apply_source()
         self.changed.emit()
 
     @Slot()
@@ -1330,6 +1381,7 @@ class Backend(QObject):
         self._paused = False
         self._countdown = 3
         self._screen = "countdown"
+        self._sleep_inhibitor.acquire()
         self._prepare_song()
         self._countdown_started = time.monotonic()
         if self._selected_source == "file":
@@ -1339,6 +1391,7 @@ class Backend(QObject):
 
     def _start_presentation(self) -> None:
         self._screen = "game"
+        self._sleep_inhibitor.acquire()
         self._song_time = 0.0
         self._target_pose = []
         self._paused = False
@@ -1421,6 +1474,7 @@ class Backend(QObject):
             return
         self._screen = "library"
         self._paused = False
+        self._sleep_inhibitor.release()
         self.changed.emit()
 
     @Slot()
@@ -1435,7 +1489,38 @@ class Backend(QObject):
             self.quitRequested.emit()
             return
         self._screen = "library"
+        self._sleep_inhibitor.release()
         self.changed.emit()
+
+    @Slot(object)
+    def applicationStateChanged(self, state: Any) -> None:
+        now = time.monotonic()
+        if state != Qt.ApplicationState.ApplicationActive:
+            self._inactive_at = now
+            return
+        inactive_at = self._inactive_at
+        was_inactive = inactive_at is not None
+        self._inactive_at = None
+        if not was_inactive:
+            return
+        if self._screen == "countdown" and inactive_at is not None:
+            self._countdown_started += now - inactive_at
+        if self._selected_source in self._camera_devices and self._camera:
+            self._camera.start()
+        elif self._selected_source == "file" and self._screen != "game":
+            self._source_player.play()
+        if self._screen != "game" or self._paused:
+            return
+        position = round((self._media_start_s + self._song_time) * 1_000)
+        for player in (self._coach_player, self._music_player):
+            if not player.source().isEmpty():
+                player.setPosition(position)
+                player.play()
+        if self._selected_source == "file":
+            self._source_player.play()
+        self._media_position_s = self._song_time
+        self._media_position_at = now
+        self._play_started_at = now - self._song_time
 
     @Slot(str, "QVariant")
     def setOption(self, name: str, value: Any) -> None:
@@ -1752,6 +1837,7 @@ class Backend(QObject):
         ]
         self._presentation_finished = True
         self._paused = True
+        self._sleep_inhibitor.release()
         self._coach_player.pause()
         self._music_player.pause()
         self.changed.emit()
@@ -1791,6 +1877,7 @@ class Backend(QObject):
             "unlock" if newly_unlocked else "star" if result["team_stars"] else "miss"
         )
         self._screen = "results"
+        self._sleep_inhibitor.release()
         self._coach_player.stop()
         self._music_player.stop()
         self.changed.emit()
@@ -1800,6 +1887,7 @@ class Backend(QObject):
         if self._song_import_worker and self._song_import_worker.is_alive():
             self._song_import_worker.join(timeout=2.0)
         self._import_capture_paused = False
+        self._sleep_inhibitor.release()
         self._ticker.stop()
         self._stop_source()
         self._coach_player.stop()
@@ -1841,6 +1929,7 @@ def _run(
         presentation_video=presentation_video,
     )
     backend.quitRequested.connect(app.quit)
+    app.applicationStateChanged.connect(backend.applicationStateChanged)
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("backend", backend)
     qml = files("opendance.qml").joinpath("Main.qml")

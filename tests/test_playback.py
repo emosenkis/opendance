@@ -8,12 +8,14 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+from PySide6.QtCore import Qt
 from PySide6.QtMultimedia import QMediaPlayer
 
 from opendance.app import (
     Backend,
     FEEDBACK_INTERVAL_SECONDS,
     MAX_PLAYERS,
+    SleepInhibitor,
     _video_thumbnail,
     _enabled,
     _feedback_due,
@@ -144,6 +146,7 @@ class PlaybackPolicyTest(unittest.TestCase):
         backend._max_players = 6
         backend._selected_source = "camera"
         backend._feedback = []
+        backend._sleep_inhibitor = SimpleNamespace(acquire=Mock())
         backend.feedbackChanged = SimpleNamespace(emit=Mock())
         backend._result = {}
         backend._prepare_song = Mock()
@@ -154,6 +157,48 @@ class PlaybackPolicyTest(unittest.TestCase):
 
         session.assert_called_once()
         self.assertEqual(backend._screen, "countdown")
+        backend._sleep_inhibitor.acquire.assert_called_once_with()
+
+    def test_sleep_inhibitor_uses_one_releasable_linux_process(self):
+        process = SimpleNamespace(terminate=Mock())
+        inhibitor = SleepInhibitor()
+
+        with (
+            patch("opendance.app.sys.platform", "linux"),
+            patch("opendance.app.shutil.which", return_value="systemd-inhibit"),
+            patch("opendance.app.subprocess.Popen", return_value=process) as popen,
+        ):
+            inhibitor.acquire()
+            inhibitor.acquire()
+            inhibitor.release()
+
+        popen.assert_called_once()
+        process.terminate.assert_called_once_with()
+
+    def test_wake_resumes_media_at_current_song_time(self):
+        player = SimpleNamespace(
+            source=lambda: SimpleNamespace(isEmpty=lambda: False),
+            setPosition=Mock(),
+            play=Mock(),
+        )
+        backend = Backend.__new__(Backend)
+        backend._inactive_at = 10.0
+        backend._selected_source = "camera"
+        backend._camera_devices = {"camera": object()}
+        backend._camera = SimpleNamespace(start=Mock())
+        backend._screen = "game"
+        backend._paused = False
+        backend._media_start_s = 2.5
+        backend._song_time = 12.0
+        backend._coach_player = player
+        backend._music_player = player
+
+        with patch("opendance.app.time.monotonic", return_value=20.0):
+            backend.applicationStateChanged(Qt.ApplicationState.ApplicationActive)
+
+        backend._camera.start.assert_called_once_with()
+        player.setPosition.assert_called_with(14_500)
+        self.assertEqual(backend._media_position_s, 12.0)
 
     def test_discovered_default_camera_is_activated_without_clicking_it(self):
         device = SimpleNamespace(
@@ -262,6 +307,7 @@ class PlaybackPolicyTest(unittest.TestCase):
         backend._play_stinger = Mock()
         backend._coach_player = SimpleNamespace(stop=Mock())
         backend._music_player = SimpleNamespace(stop=Mock())
+        backend._sleep_inhibitor = SimpleNamespace(release=Mock())
         backend.changed = SimpleNamespace(emit=Mock())
 
         backend._finish_game()
