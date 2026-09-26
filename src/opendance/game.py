@@ -1221,7 +1221,8 @@ class GameSession:
         self._move_definitions = (
             scoring.get("definitions", {})
             if isinstance(scoring, Mapping)
-            and scoring.get("schema_version") == 1
+            and isinstance(scoring.get("schema_version"), int)
+            and scoring.get("schema_version") >= 1
             and isinstance(scoring.get("definitions"), Mapping)
             else {}
         )
@@ -1350,6 +1351,8 @@ class GameSession:
                 {
                     "dancer_index": dancer_index,
                     "keypoints": [list(point) for point in pose],
+                    "cue_arrows": list(definition.get("cue_arrows", ())),
+                    "important_joints": list(definition.get("important_joints", ())),
                 }
             )
         return {

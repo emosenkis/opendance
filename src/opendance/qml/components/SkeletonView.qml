@@ -86,6 +86,34 @@ Item {
             context.fill()
         }
 
+        var arrows = person && person.cue_arrows ? person.cue_arrows : []
+        context.strokeStyle = "#ffe66d"
+        context.fillStyle = "#ffe66d"
+        context.lineWidth = Math.max(3, context.lineWidth * 1.35)
+        for (var arrowIndex = 0; arrowIndex < arrows.length; ++arrowIndex) {
+            var arrow = arrows[arrowIndex]
+            if (!arrow.from || !arrow.to)
+                continue
+            var fromX = (root.mirror ? 1 - number(arrow.from[0], 0) : number(arrow.from[0], 0)) * canvas.width
+            var fromY = number(arrow.from[1], 0) * canvas.height
+            var toX = (root.mirror ? 1 - number(arrow.to[0], 0) : number(arrow.to[0], 0)) * canvas.width
+            var toY = number(arrow.to[1], 0) * canvas.height
+            var angle = Math.atan2(toY - fromY, toX - fromX)
+            var head = Math.max(7, context.lineWidth * 2.5)
+            context.beginPath()
+            context.moveTo(fromX, fromY)
+            context.lineTo(toX, toY)
+            context.stroke()
+            context.beginPath()
+            context.moveTo(toX, toY)
+            context.lineTo(toX - head * Math.cos(angle - Math.PI / 6),
+                           toY - head * Math.sin(angle - Math.PI / 6))
+            context.lineTo(toX - head * Math.cos(angle + Math.PI / 6),
+                           toY - head * Math.sin(angle + Math.PI / 6))
+            context.closePath()
+            context.fill()
+        }
+
         if (root.showBoxes && person && person.bbox && person.bbox.length >= 4) {
             var box = person.bbox
             var bx = number(box[0], 0)

@@ -107,6 +107,10 @@ class PlaybackPolicyTest(unittest.TestCase):
         hud = files("opendance").joinpath("qml/components/PlayerHud.qml").read_text()
         self.assertIn('source: root.value("face", "")', hud)
         self.assertIn("fillMode: Image.PreserveAspectCrop", hud)
+        skeleton = files("opendance").joinpath(
+            "qml/components/SkeletonView.qml"
+        ).read_text()
+        self.assertIn("person.cue_arrows", skeleton)
 
     def test_video_thumbnail_is_extracted_once_then_reused(self):
         with TemporaryDirectory() as directory:

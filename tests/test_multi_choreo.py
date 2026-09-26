@@ -11,6 +11,7 @@ import weakref
 
 from opendance.extract import (
     _build_move_scoring,
+    _cluster_move_occurrences,
     _rank_tracks,
     _record_tracks,
     _role_timeline,
@@ -284,7 +285,7 @@ class MultiDancerTest(unittest.TestCase):
 
         artifact = _build_move_scoring(timeline, 2)
         self.assertEqual(artifact, _build_move_scoring(timeline, 2))
-        self.assertEqual(artifact["schema_version"], 1)
+        self.assertEqual(artifact["schema_version"], 2)
         self.assertEqual(artifact["phase_count"], 12)
         self.assertEqual(
             [(segment["start"], segment["end"]) for segment in artifact["segments"]],
@@ -301,6 +302,24 @@ class MultiDancerTest(unittest.TestCase):
             self.assertEqual(len(definition["weights"]), 17)
             self.assertLess(definition["cue_sample"], 12)
             self.assertLessEqual(len(definition["important_joints"]), 3)
+            self.assertLessEqual(len(definition["cue_arrows"]), 3)
+
+    def test_repeated_moves_share_one_medoid_definition(self):
+        repeated = [
+            [list(point) for point in named_pose(name)]
+            for name in (
+                "ready", "clap", "star", "clap", "ready", "clap",
+                "star", "clap", "ready", "clap", "star", "ready",
+            )
+        ]
+        different = [[list(point) for point in named_pose("ready")]] * 12
+        occurrences = [
+            {"duration": 3.0, "definition": {"poses": repeated}},
+            {"duration": 3.1, "definition": {"poses": repeated}},
+            {"duration": 3.0, "definition": {"poses": different}},
+        ]
+
+        self.assertEqual(_cluster_move_occurrences(occurrences), [[0, 1], [2]])
 
     def test_move_scoring_preserves_root_travel_in_definition(self):
         timeline = []
@@ -690,7 +709,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertTrue(choreography["timeline"][3]["scene_cut"])
         self.assertIn(33, choreography["dancers"][0]["track_ids"])
         self.assertIn(44, choreography["dancers"][1]["track_ids"])
-        self.assertEqual(choreography["move_scoring"]["schema_version"], 1)
+        self.assertEqual(choreography["move_scoring"]["schema_version"], 2)
 
 
 if __name__ == "__main__":

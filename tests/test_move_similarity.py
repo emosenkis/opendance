@@ -32,7 +32,12 @@ def segmented_song():
             "move_scoring": {
                 "schema_version": 1,
                 "definitions": {
-                    "first": {"poses": poses, "cue_sample": 1},
+                    "first": {
+                        "poses": poses,
+                        "cue_sample": 1,
+                        "important_joints": [9],
+                        "cue_arrows": [{"joint": 9, "from": [0.4, 0.5], "to": [0.7, 0.2]}],
+                    },
                     "second": {"poses": poses, "cue_sample": 4},
                 },
                 "segments": [
@@ -139,6 +144,8 @@ class MoveSimilarityTest(unittest.TestCase):
         self.assertEqual(first["dancers"][0]["keypoints"], [
             list(point) for point in scoring["definitions"]["first"]["poses"][1]
         ])
+        self.assertEqual(first["dancers"][0]["important_joints"], [9])
+        self.assertEqual(first["dancers"][0]["cue_arrows"][0]["joint"], 9)
         second = session.next_move_cue(0.5)
         self.assertEqual(second["name"], "MOVE 2")
         self.assertEqual(second, session.next_move_cue(1.1))

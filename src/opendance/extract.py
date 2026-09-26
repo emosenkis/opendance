@@ -24,6 +24,7 @@ from .game import (
     _pose_anchor_scale,
     assign_dancers,
     interpolate_pose,
+    move_similarity,
     pose_similarity,
 )
 from .vision import COCO17_KEYPOINTS, PoseEngine, TemporalPoseFilter, create_pose_engine
@@ -38,8 +39,8 @@ _ROLE_DISCONTINUITY = 0.72
 _ROLE_JUMP_MARGIN = 0.08
 _ROLE_MAX_SPEED = 0.8
 ROLE_ASSIGNMENT_METHOD = "bidirectional_track_stitch_with_spatial_shuffle_guard"
-MOVE_SCORING_SCHEMA_VERSION = 1
-MOVE_SCORING_FEATURE = "coco17-motion-v1"
+MOVE_SCORING_SCHEMA_VERSION = 2
+MOVE_SCORING_FEATURE = "coco17-motion-clustered-v2"
 MOVE_SCORING_PHASES = 12
 _MOVE_MIN_SECONDS = 2.0
 _MOVE_MAX_SECONDS = 4.0
@@ -869,6 +870,17 @@ def _move_definition(
         if peak > 1e-9
         else MOVE_SCORING_PHASES // 2
     )
+    arrow_start = max(0, cue_sample - 2)
+    arrows = [
+        {
+            "joint": index,
+            "from": [round(poses[arrow_start][index][0], 4), round(poses[arrow_start][index][1], 4)],
+            "to": [round(poses[cue_sample][index][0], 4), round(poses[cue_sample][index][1], 4)],
+        }
+        for index in important
+        if min(poses[arrow_start][index][2], poses[cue_sample][index][2]) >= _MOVE_CONFIDENCE
+        and math.dist(poses[arrow_start][index][:2], poses[cue_sample][index][:2]) >= 0.025
+    ]
     return {
         "poses": [
             [
@@ -880,7 +892,53 @@ def _move_definition(
         "weights": weights,
         "cue_sample": cue_sample,
         "important_joints": important,
+        "cue_arrows": arrows,
     }
+
+
+def _cluster_move_occurrences(occurrences: list[dict[str, Any]]) -> list[list[int]]:
+    """Conservatively group repeated moves using complete-link DTW similarity."""
+
+    if not occurrences:
+        return []
+    distances: dict[tuple[int, int], float] = {}
+
+    def distance(left: int, right: int) -> float:
+        key = (min(left, right), max(left, right))
+        if key not in distances:
+            first, second = occurrences[left], occurrences[right]
+            ratio = first["duration"] / max(1e-9, second["duration"])
+            distances[key] = (
+                1.0
+                if not 0.75 <= ratio <= 1.0 / 0.75
+                else 1.0
+                - move_similarity(
+                    first["definition"]["poses"],
+                    second["definition"]["poses"],
+                    allow_mirror=False,
+                )
+            )
+        return distances[key]
+
+    clusters = [[index] for index in range(len(occurrences))]
+    # ponytail: cubic complete-link scan is fine for song-sized segment counts;
+    # replace with a priority queue only if extraction profiling warrants it.
+    while True:
+        options = []
+        for left in range(len(clusters)):
+            for right in range(left + 1, len(clusters)):
+                complete_link = max(
+                    distance(first, second)
+                    for first in clusters[left]
+                    for second in clusters[right]
+                )
+                if complete_link <= 0.14:
+                    options.append((complete_link, clusters[left][0], clusters[right][0], left, right))
+        if not options:
+            break
+        _, _, _, left, right = min(options)
+        clusters[left].extend(clusters.pop(right))
+    return clusters
 
 
 def _build_move_scoring(
@@ -903,26 +961,67 @@ def _build_move_scoring(
         ]
         for dancer_index in range(dancer_count)
     }
+    occurrences: dict[int, list[dict[str, Any]]] = {
+        dancer_index: [] for dancer_index in range(dancer_count)
+    }
+    segments = []
     for start_index, end_index in _move_boundaries(frames):
         start, end = frames[start_index]["time"], frames[end_index]["time"]
-        dancers = []
+        segment = {"start": round(start, 3), "end": round(end, 3), "dancers": []}
         for dancer_index, samples in lanes.items():
             definition = _move_definition(samples, start, end) if samples else None
             if definition is None:
                 continue
-            definition_id = f"m{len(artifact['definitions']):04d}"
-            artifact["definitions"][definition_id] = definition
-            dancers.append(
+            occurrence = {
+                "definition": definition,
+                "duration": end - start,
+                "segment": len(segments),
+            }
+            occurrences[dancer_index].append(occurrence)
+            segment["dancers"].append(
                 {
                     "dancer_index": dancer_index,
-                    "definition": definition_id,
+                    "definition": "",
                     "mirrored": False,
                 }
             )
-        if dancers:
-            artifact["segments"].append(
-                {"start": round(start, 3), "end": round(end, 3), "dancers": dancers}
+        if segment["dancers"]:
+            segments.append(segment)
+
+    for dancer_index, lane_occurrences in occurrences.items():
+        for cluster in _cluster_move_occurrences(lane_occurrences):
+            medoid = min(
+                cluster,
+                key=lambda candidate: (
+                    sum(
+                        1.0
+                        - move_similarity(
+                            lane_occurrences[candidate]["definition"]["poses"],
+                            lane_occurrences[other]["definition"]["poses"],
+                            allow_mirror=False,
+                        )
+                        for other in cluster
+                    ),
+                    candidate,
+                ),
             )
+            definition_id = f"m{len(artifact['definitions']):04d}"
+            definition = dict(lane_occurrences[medoid]["definition"])
+            definition["occurrence_count"] = len(cluster)
+            artifact["definitions"][definition_id] = definition
+            for occurrence_index in cluster:
+                segment_index = lane_occurrences[occurrence_index]["segment"]
+                dancer = next(
+                    item
+                    for item in segments[segment_index]["dancers"]
+                    if item["dancer_index"] == dancer_index
+                )
+                dancer["definition"] = definition_id
+
+    for segment_index, segment in enumerate(segments):
+        first_definition = segment["dancers"][0]["definition"]
+        segment["name"] = f"MOVE {int(first_definition[1:]) + 1}"
+        artifact["segments"].append(segment)
     return artifact
 
 

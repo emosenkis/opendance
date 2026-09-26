@@ -225,6 +225,22 @@ ones where they conflict.
   motion features, distinctive still/key poses, and arrows on the one to three
   most important moving body parts so automatically derived cues remain useful
   to a human learning and copying the dance.
+  - [x] First stage: conservatively cluster same-lane occurrences with bounded
+    DTW and complete-link distance, require compatible durations, choose an
+    actual medoid (never an averaged synthetic pose), reuse its definition for
+    scoring/cues, and render up to three salient-joint arrows.
+  - [ ] Next stage: derive candidate boundaries from beats/half-beats and
+    smoothed joint-velocity minima, then validate thresholds on representative
+    songs before replacing the current 2–4 second segmentation. Treat scene
+    cuts as weak evidence; do not merge mirrors until evaluation shows they are
+    semantically identical.
+  - Research basis: dance boundaries are probabilistic and benefit from audio
+    plus bone motion ([Endo et al.](https://arxiv.org/abs/2405.19727)); bounded
+    DTW supports separate pose/timing evaluation ([Kim & Kim](https://history.siggraph.org/wp-content/uploads/2022/01/2018-67-Kim_Interactive-Dance-Performance.pdf));
+    reduced key-feature feedback can outperform full-body correction
+    ([Anderson et al.](https://eprints.lancs.ac.uk/id/eprint/54943/)); and dense
+    motion labels may overlap rather than form one objectively correct flat
+    sequence ([BABEL](https://openaccess.thecvf.com/content/CVPR2021/papers/Punnakkal_BABEL_Bodies_Action_and_Behavior_With_English_Labels_CVPR_2021_paper.pdf)).
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 
