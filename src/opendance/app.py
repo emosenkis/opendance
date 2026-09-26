@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import math
 import os
 import queue
 import signal
+import shutil
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 from importlib.resources import files
@@ -36,7 +40,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow
 from PySide6.QtWidgets import QApplication
 
-from .audio import ensure_song_wav
+from .audio import default_cache_dir, ensure_song_wav
 from .game import (
     GameSession,
     assign_dancers,
@@ -134,12 +138,64 @@ def song_preview(song: dict[str, Any]) -> dict[str, Any]:
         max(0.0, duration - start),
     )
     media_start = _song_seconds(song, "media_start")
+    preview_start_ms = round((media_start + start) * 1_000)
     return {
         "previewVideoUrl": QUrl.fromLocalFile(str(video)).toString() if video else "",
         "previewAudioUrl": QUrl.fromLocalFile(str(audio)).toString() if audio else "",
-        "previewStartMs": round((media_start + start) * 1_000),
+        "previewThumbnailUrl": _video_thumbnail(video, preview_start_ms),
+        "previewStartMs": preview_start_ms,
         "previewDurationMs": round(length * 1_000),
     }
+
+
+def _video_thumbnail(video: Path | None, start_ms: int) -> str:
+    """Return a cached still for a preview without opening a video in QML."""
+
+    ffmpeg = shutil.which("ffmpeg")
+    if video is None or ffmpeg is None:
+        return ""
+    try:
+        stat = video.stat()
+        key = hashlib.sha256(
+            f"{video}:{stat.st_size}:{stat.st_mtime_ns}:{start_ms}".encode()
+        ).hexdigest()[:24]
+        destination = default_cache_dir() / "thumbnails" / f"{key}.jpg"
+        if destination.is_file() and destination.stat().st_size:
+            return QUrl.fromLocalFile(str(destination)).toString()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{key}-", suffix=".jpg", dir=destination.parent
+        )
+        os.close(descriptor)
+        temporary = Path(temporary_name)
+        try:
+            subprocess.run(
+                [
+                    ffmpeg,
+                    "-loglevel",
+                    "error",
+                    "-ss",
+                    f"{start_ms / 1000:.3f}",
+                    "-i",
+                    str(video),
+                    "-frames:v",
+                    "1",
+                    "-vf",
+                    "scale=640:-2",
+                    "-y",
+                    str(temporary),
+                ],
+                check=True,
+                timeout=20,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return QUrl.fromLocalFile(str(destination)).toString()
+    except (OSError, subprocess.SubprocessError):
+        return ""
 
 
 def framing_nudge(bbox: Any) -> str:

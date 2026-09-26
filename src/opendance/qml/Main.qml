@@ -134,6 +134,26 @@ ApplicationWindow {
         backend.selectSong(songList.currentIndex)
     }
 
+    function moveSongColumn(delta) {
+        if (!songList.count)
+            return
+        var row = songList.currentIndex % songList.rowCount
+        var column = Math.floor(songList.currentIndex / songList.rowCount) + delta
+        var target = column * songList.rowCount + row
+        if (column >= 0 && target >= 0 && target < songList.count)
+            moveSong(target - songList.currentIndex)
+    }
+
+    function moveSongRow(delta) {
+        if (!songList.count)
+            return
+        var target = songList.currentIndex + delta
+        if (target >= 0 && target < songList.count
+                && Math.floor(target / songList.rowCount)
+                   === Math.floor(songList.currentIndex / songList.rowCount))
+            moveSong(delta)
+    }
+
     function syncSongSelection() {
         var index = Number(backend.selectedSongIndex)
         if (songList.count > 0 && index >= 0 && index < songList.count
@@ -196,9 +216,13 @@ ApplicationWindow {
         } else if (normalized === "accept" || normalized === "select" || normalized === "a") {
             activateFocused()
         } else if ((normalized === "left" || normalized === "dpad_left") && screenName === "library") {
-            moveSong(-songList.rowCount)
+            moveSongColumn(-1)
         } else if ((normalized === "right" || normalized === "dpad_right") && screenName === "library") {
-            moveSong(songList.rowCount)
+            moveSongColumn(1)
+        } else if ((normalized === "up" || normalized === "dpad_up") && screenName === "library") {
+            moveSongRow(-1)
+        } else if ((normalized === "down" || normalized === "dpad_down") && screenName === "library") {
+            moveSongRow(1)
         } else if (normalized === "up" || normalized === "left" || normalized.indexOf("dpad_up") >= 0) {
             moveFocus(false)
         } else if (normalized === "down" || normalized === "right" || normalized.indexOf("dpad_down") >= 0) {
@@ -254,14 +278,14 @@ ApplicationWindow {
         sequence: "A"
         enabled: window.screenName === "library"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveSong(-songList.rowCount)
+        onActivated: window.moveSongColumn(-1)
     }
 
     Shortcut {
         sequence: "D"
         enabled: window.screenName === "library"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveSong(songList.rowCount)
+        onActivated: window.moveSongColumn(1)
     }
 
     Shortcut {
@@ -748,19 +772,19 @@ ApplicationWindow {
                     highlightMoveDuration: window.reducedMotion ? 0 : 220
 
                     Keys.onLeftPressed: function(event) {
-                        window.moveSong(-rowCount)
+                        window.moveSongColumn(-1)
                         event.accepted = true
                     }
                     Keys.onRightPressed: function(event) {
-                        window.moveSong(rowCount)
+                        window.moveSongColumn(1)
                         event.accepted = true
                     }
                     Keys.onUpPressed: function(event) {
-                        window.moveSong(-1)
+                        window.moveSongRow(-1)
                         event.accepted = true
                     }
                     Keys.onDownPressed: function(event) {
-                        window.moveSong(1)
+                        window.moveSongRow(1)
                         event.accepted = true
                     }
                     Keys.onReturnPressed: function(event) {
@@ -853,14 +877,24 @@ ApplicationWindow {
                                         }
                                     }
 
+                                    Image {
+                                        anchors.fill: parent
+                                        source: window.itemValue(songDelegate.modelData,
+                                                                 "previewThumbnailUrl", "")
+                                        visible: String(source) !== ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                        cache: true
+                                    }
+
                                     Loader {
                                         id: previewLoader
                                         anchors.fill: parent
-                                        active: window.screenName === "library"
+                                        active: songDelegate.selected
+                                                && window.screenName === "library"
                                                 && previewDuration > 0
                                                 && (String(previewVideo) !== ""
-                                                    || (songDelegate.selected
-                                                        && String(previewAudio) !== ""))
+                                                    || String(previewAudio) !== "")
                                         readonly property url previewVideo: window.itemValue(
                                                                  songDelegate.modelData,
                                                                  "previewVideoUrl", "")
@@ -881,14 +915,14 @@ ApplicationWindow {
                                                 startMs: previewLoader.previewStart
                                                 durationMs: previewLoader.previewDuration
                                                 outputVolume: backend.volume
-                                                playing: songDelegate.selected
                                             }
                                         }
                                     }
 
                                     Label {
                                         anchors.centerIn: parent
-                                        visible: String(previewLoader.previewVideo) === ""
+                                        visible: String(window.itemValue(songDelegate.modelData,
+                                                                         "previewThumbnailUrl", "")) === ""
                                         text: songDelegate.locked ? "\u26BF" : "\u266B"
                                         color: songDelegate.locked ? "#d4d9e5" : "#ffffff"
                                         font.pixelSize: 76 * window.uiScale

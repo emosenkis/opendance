@@ -14,6 +14,7 @@ from opendance.app import (
     Backend,
     FEEDBACK_INTERVAL_SECONDS,
     MAX_PLAYERS,
+    _video_thumbnail,
     _enabled,
     _feedback_due,
     _interpolated_media_time,
@@ -95,9 +96,32 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertIn("GridView {\n                    id: songList", qml)
         self.assertIn("readonly property int rowCount: 2", qml)
         self.assertIn("cellWidth: width / visibleColumns", qml)
-        self.assertIn("playing: songDelegate.selected", qml)
-        self.assertIn('visible: String(previewLoader.previewVideo) === ""', qml)
-        self.assertIn("primaryPlayer.position = startMs", preview)
+        self.assertIn("function moveSongColumn(delta)", qml)
+        self.assertIn("function moveSongRow(delta)", qml)
+        self.assertIn('"previewThumbnailUrl", ""', qml)
+        self.assertIn("active: songDelegate.selected", qml)
+        self.assertNotIn("property bool playing", preview)
+
+    def test_video_thumbnail_is_extracted_once_then_reused(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            video = root / "dance.mp4"
+            video.write_bytes(b"video")
+
+            def extract(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"jpeg")
+
+            with (
+                patch("opendance.app.default_cache_dir", return_value=root / "cache"),
+                patch("opendance.app.shutil.which", return_value="ffmpeg"),
+                patch("opendance.app.subprocess.run", side_effect=extract) as run,
+            ):
+                first = _video_thumbnail(video, 2_500)
+                second = _video_thumbnail(video, 2_500)
+
+            self.assertEqual(first, second)
+            self.assertTrue(first.endswith(".jpg"))
+            run.assert_called_once()
 
     def test_runtime_supports_six_dynamic_slots(self):
         self.assertEqual(MAX_PLAYERS, 6)

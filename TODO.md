@@ -193,6 +193,10 @@ ones where they conflict.
   preview-start frame as its resting thumbnail, animate/audio-preview only the
   selected song, and reserve the existing art placeholder for songs without
   video.
+- [x] Render unselected song thumbnails as cached still images extracted at the
+  preview start rather than live video players. In the two-row grid, keep
+  left/right on the same row and up/down in the same column, including gamepad
+  navigation and incomplete final columns.
 - [ ] Complete final visual/audio polish review at 1280×720 and the 900×540
   minimum with 1–6 players and reduced-motion mode.
 
