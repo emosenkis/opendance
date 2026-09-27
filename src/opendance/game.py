@@ -1196,6 +1196,7 @@ class MoveFeedback:
     points: int
     combo: int
     total_score: int
+    power: bool = False
 
 
 class GameSession:
@@ -1227,6 +1228,12 @@ class GameSession:
             else {}
         )
         self._segments = []
+        score_masks = scoring.get("score_masks", []) if isinstance(scoring, Mapping) else []
+        has_segment_scoring = bool(
+            self._move_definitions
+            and isinstance(scoring.get("segments"), Sequence)
+            and scoring.get("segments")
+        )
         if self._move_definitions and isinstance(scoring.get("segments"), Sequence):
             for segment in scoring["segments"]:
                 try:
@@ -1240,11 +1247,17 @@ class GameSession:
                     and 0 <= start < end
                     and isinstance(dancers, Sequence)
                     and not isinstance(dancers, (str, bytes))
+                    and not any(
+                        isinstance(mask, Mapping)
+                        and float(mask.get("start", math.inf)) < end
+                        and float(mask.get("end", -math.inf)) > start
+                        for mask in score_masks
+                    )
                 ):
                     self._segments.append(dict(segment, start=start, end=end))
             self._segments.sort(key=lambda segment: segment["start"])
         self._uses_extracted_timeline = not bool(self.moves)
-        if not self.moves and not self._segments:
+        if not self.moves and not self._segments and not has_segment_scoring:
             # ponytail: extracted video has no semantic moves; one-second pose
             # cues keep old packages playable until they are re-extracted.
             last_cue = -math.inf
@@ -1254,7 +1267,7 @@ class GameSession:
                         {"time": cue_time, "name": "FOLLOW", "keypoints": pose}
                     )
                     last_cue = cue_time
-        if not self.moves and not self._segments:
+        if not self.moves and not self._segments and not has_segment_scoring:
             raise ValueError("song has no usable move or extracted-pose timeline")
         self.player_slots = PlayerSlots(max_players=max_players)
         self.scores = {index: PlayerScore(index) for index in range(max_players)}
@@ -1550,6 +1563,7 @@ class GameSession:
                         points=points,
                         combo=player_score.combo,
                         total_score=player_score.points,
+                        power=bool(segment.get("power")),
                     )
                 )
             self._next_segment += 1

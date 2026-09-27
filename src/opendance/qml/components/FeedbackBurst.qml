@@ -14,6 +14,8 @@ Item {
     }
 
     function feedbackColor() {
+        if (value("power", false))
+            return "#ffe66d"
         var rating = String(value("grade", value("rating", value("text", "")))).toLowerCase()
         if (rating.indexOf("perfect") >= 0)
             return "#ffe66d"
@@ -28,7 +30,7 @@ Item {
         var message = value("grade", value("text", value("rating", "")))
         if (!message)
             return
-        ratingLabel.text = String(message).toUpperCase()
+        ratingLabel.text = value("power", false) ? "YEAH!" : String(message).toUpperCase()
         pointsLabel.text = value("points", 0) > 0 ? "+" + value("points", 0) : ""
         burst.stop()
         quietTimer.stop()

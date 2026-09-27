@@ -254,6 +254,16 @@ ones where they conflict.
 
 ## Song tooling
 
+- [x] Add a visual dance editor reachable from Settings for extracted/local
+  songs. It must preview the video and pose timeline at a seekable playhead;
+  correct dancer-role swaps over a selected time range; split or merge
+  incorrectly segmented dance moves; choose/tweak each move's still-pose and
+  salient-body-part arrow cues; mark moves as special “power moves” with
+  distinct gameplay feedback; and add time-range masks that exclude video
+  portions from choreography cues and scoring without destructively editing the
+  source media. Save edits atomically with a recoverable backup, validate role,
+  segment, cue, and mask ranges, and preserve unrelated song metadata.
+
 - [x] Integrate song importing into Settings: choose a local video or supported
   URL, automatically prefill embedded/file-name title, artist, and duration,
   then review/edit the useful extraction choices before work begins. Expose

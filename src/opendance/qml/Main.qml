@@ -2157,6 +2157,14 @@ ApplicationWindow {
                     }
 
                     NeonButton {
+                        text: "EDIT DANCE"
+                        compact: true
+                        accent: "#55f7ff"
+                        enabled: backend.danceEditorAvailable
+                        onClicked: danceEditorDialog.begin()
+                    }
+
+                    NeonButton {
                         text: "ADD SONG"
                         compact: true
                         accent: "#ff4fcb"
@@ -2338,6 +2346,12 @@ ApplicationWindow {
 
     SongImportDialog {
         id: songImportDialog
+        appBackend: backend
+        uiScale: window.uiScale
+    }
+
+    DanceEditorDialog {
+        id: danceEditorDialog
         appBackend: backend
         uiScale: window.uiScale
     }

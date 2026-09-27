@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from bisect import bisect_left
 import hashlib
 import json
 import math
@@ -42,6 +43,7 @@ from PySide6.QtQuick import QQuickWindow
 from PySide6.QtWidgets import QApplication
 
 from .audio import default_cache_dir, ensure_song_wav
+from .editor import editor_state, save_edit
 from .game import (
     GameSession,
     assign_dancers,
@@ -484,6 +486,7 @@ class Backend(QObject):
     fullscreenRequested = Signal()
     quitRequested = Signal()
     songImportChanged = Signal()
+    danceEditorChanged = Signal()
     _vision_result = Signal(object)
     _vision_status = Signal(str)
     _import_prepared = Signal(object)
@@ -639,6 +642,9 @@ class Backend(QObject):
         self._song_import_worker: threading.Thread | None = None
         self._song_import_cancel = threading.Event()
         self._import_capture_paused = False
+        self._dance_editor: dict[str, Any] = {}
+        self._dance_editor_frames: list[dict[str, Any]] = []
+        self._dance_editor_times: list[float] = []
 
         self._vision_result.connect(self._on_pose_result)
         self._vision_status.connect(self._set_model_status)
@@ -777,6 +783,14 @@ class Backend(QObject):
     @Property("QVariantMap", notify=songImportChanged)
     def songImportPreview(self) -> dict[str, Any]:
         return dict(self._song_import_preview)
+
+    @Property("QVariantMap", notify=danceEditorChanged)
+    def danceEditor(self) -> dict[str, Any]:
+        return dict(self._dance_editor)
+
+    @Property(bool, notify=changed)
+    def danceEditorAvailable(self) -> bool:
+        return bool(self._selected_song_metadata.get("_manifest"))
 
     @Property(bool, constant=True)
     def alternateSourcesEnabled(self) -> bool:
@@ -1018,6 +1032,92 @@ class Backend(QObject):
             return
         self._screen = self._settings_return_screen
         self.changed.emit()
+
+    @Slot()
+    def openDanceEditor(self) -> None:
+        manifest = self._selected_song_metadata.get("_manifest")
+        if not manifest:
+            self._dance_editor = {"status": "Choose an imported or extracted song first."}
+        else:
+            try:
+                path = Path(str(manifest))
+                self._dance_editor = editor_state(self._selected_song, path)
+                self._dance_editor["manifest"] = str(path)
+                self._dance_editor_frames = list(
+                    self._selected_song.get("choreography", {}).get("timeline", [])
+                )
+                self._dance_editor_times = [
+                    float(frame.get("timestamp_ms", 0.0)) / 1_000.0
+                    for frame in self._dance_editor_frames
+                ]
+            except (OSError, TypeError, ValueError) as exc:
+                self._dance_editor = {"status": f"Cannot edit this song: {exc}"}
+        self.danceEditorChanged.emit()
+
+    @Slot("QVariantMap")
+    def applyDanceEdit(self, values: dict[str, Any]) -> None:
+        manifest = self._dance_editor.get("manifest")
+        if not manifest:
+            return
+        try:
+            path = Path(str(manifest))
+            edited = save_edit(path, dict(values))
+            self._loaded_song = edited
+            self._loaded_song["_root"] = self._selected_song_metadata.get("_root", "")
+            self._loaded_song_index = self._song_index
+            self._dance_editor = editor_state(edited, path)
+            self._dance_editor.update(manifest=str(path), status="Saved")
+            self._dance_editor_frames = list(
+                edited.get("choreography", {}).get("timeline", [])
+            )
+            self._dance_editor_times = [
+                float(frame.get("timestamp_ms", 0.0)) / 1_000.0
+                for frame in self._dance_editor_frames
+            ]
+            self.changed.emit()
+        except (OSError, TypeError, ValueError) as exc:
+            self._dance_editor["status"] = f"Edit failed: {exc}"
+        self.danceEditorChanged.emit()
+
+    @Slot(float)
+    def seekDanceEditor(self, time_s: float) -> None:
+        if not self._dance_editor_times:
+            return
+        index = bisect_left(self._dance_editor_times, max(0.0, float(time_s)))
+        index = min(index, len(self._dance_editor_times) - 1)
+        if index and abs(self._dance_editor_times[index - 1] - time_s) < abs(
+            self._dance_editor_times[index] - time_s
+        ):
+            index -= 1
+        self._dance_editor["time"] = self._dance_editor_times[index]
+        self._dance_editor["people"] = self._dance_editor_frames[index].get("people", [])
+        self.danceEditorChanged.emit()
+
+    @Slot(int)
+    def previewDanceMove(self, index: int) -> None:
+        if self._loaded_song is None:
+            return
+        scoring = self._loaded_song.get("choreography", {}).get("move_scoring", {})
+        try:
+            segment = scoring["segments"][index]
+        except (IndexError, KeyError, TypeError):
+            return
+        people = []
+        for dancer in segment.get("dancers", []):
+            definition = scoring.get("definitions", {}).get(dancer.get("definition"), {})
+            poses = definition.get("poses", [])
+            cue = int(definition.get("cue_sample", len(poses) // 2))
+            if not 0 <= cue < len(poses):
+                continue
+            people.append(
+                {
+                    "dancer_index": dancer.get("dancer_index", 0),
+                    "keypoints": poses[cue],
+                    "cue_arrows": definition.get("cue_arrows", []),
+                }
+            )
+        self._dance_editor["people"] = people
+        self.danceEditorChanged.emit()
 
     def _begin_song_import_source(self, source: str, *, remote: bool = False) -> None:
         if self._song_import_busy:
