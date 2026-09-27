@@ -10,6 +10,7 @@ from unittest.mock import patch
 import weakref
 
 from opendance.extract import (
+    _beat_grid_from_samples,
     _build_move_scoring,
     _cluster_move_occurrences,
     _move_boundaries,
@@ -70,6 +71,25 @@ def assigned_timeline(frames):
 
 
 class MultiDancerTest(unittest.TestCase):
+    def test_beat_grid_detects_click_track_and_rejects_silence(self):
+        import numpy as np
+
+        sample_rate = 8_000
+        samples = np.zeros(sample_rate * 12, dtype=np.float32)
+        for beat in np.arange(0.18, 12, 0.5):
+            start = round(beat * sample_rate)
+            samples[start : start + 80] = 1.0
+
+        grid = _beat_grid_from_samples(samples, sample_rate)
+
+        self.assertIsNotNone(grid)
+        self.assertAlmostEqual(grid["bpm"], 120.0, delta=1.0)
+        self.assertLess(
+            min(abs(grid["beat_offset"] - 0.18), abs(grid["beat_offset"] - 0.68)),
+            0.04,
+        )
+        self.assertIsNone(_beat_grid_from_samples(np.zeros_like(samples), sample_rate))
+
     def test_bidirectional_stitch_relabels_a_returning_track_from_its_first_frame(self):
         frames = [
             {"timestamp_ms": 0, "people": [person(1, "ready", -0.2, [0.1, 0.1, 0.3, 0.8])]},
@@ -287,7 +307,7 @@ class MultiDancerTest(unittest.TestCase):
 
         artifact = _build_move_scoring(timeline, 2)
         self.assertEqual(artifact, _build_move_scoring(timeline, 2))
-        self.assertEqual(artifact["schema_version"], 3)
+        self.assertEqual(artifact["schema_version"], 4)
         self.assertEqual(artifact["phase_count"], 12)
         self.assertEqual(
             [(segment["start"], segment["end"]) for segment in artifact["segments"]],
@@ -305,6 +325,28 @@ class MultiDancerTest(unittest.TestCase):
             self.assertLess(definition["cue_sample"], 12)
             self.assertLessEqual(len(definition["important_joints"]), 3)
             self.assertLessEqual(len(definition["cue_arrows"]), 3)
+
+    def test_move_boundary_snaps_to_a_confident_half_beat(self):
+        timeline = []
+        for frame_index in range(60):
+            time_s = frame_index * 0.1
+            timeline.append(
+                {
+                    "timestamp_ms": time_s * 1000,
+                    "people": [
+                        {
+                            "dancer_index": 0,
+                            "keypoints": named_pose("ready" if time_s < 3.1 else "star"),
+                        }
+                    ],
+                }
+            )
+
+        unsnapped = _build_move_scoring(timeline, 1)
+        snapped = _build_move_scoring(timeline, 1, 120.0, 0.0)
+
+        self.assertEqual(unsnapped["segments"][0]["end"], 3.1)
+        self.assertEqual(snapped["segments"][0]["end"], 3.0)
 
     def test_repeated_moves_share_one_medoid_definition(self):
         repeated = [
@@ -734,7 +776,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertTrue(choreography["timeline"][3]["scene_cut"])
         self.assertIn(33, choreography["dancers"][0]["track_ids"])
         self.assertIn(44, choreography["dancers"][1]["track_ids"])
-        self.assertEqual(choreography["move_scoring"]["schema_version"], 3)
+        self.assertEqual(choreography["move_scoring"]["schema_version"], 4)
 
 
 if __name__ == "__main__":

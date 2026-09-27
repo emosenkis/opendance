@@ -87,7 +87,12 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
                 f"{path}: saved role timeline cannot be refreshed: {exc}"
             ) from exc
 
-    scoring = _build_move_scoring(timeline, len(dancers))
+    scoring = _build_move_scoring(
+        timeline,
+        len(dancers),
+        song.get("bpm"),
+        song.get("beat_offset", 0.0),
+    )
     if not _current_scoring(scoring):
         raise ValueError(f"{path}: saved timeline produced no usable dance moves")
     if rerole:

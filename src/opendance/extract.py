@@ -8,6 +8,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -39,13 +40,115 @@ _ROLE_DISCONTINUITY = 0.72
 _ROLE_JUMP_MARGIN = 0.08
 _ROLE_MAX_SPEED = 0.8
 ROLE_ASSIGNMENT_METHOD = "bidirectional_track_stitch_with_spatial_shuffle_guard"
-MOVE_SCORING_SCHEMA_VERSION = 3
-MOVE_SCORING_FEATURE = "coco17-motion-clustered-v3"
+MOVE_SCORING_SCHEMA_VERSION = 4
+MOVE_SCORING_FEATURE = "coco17-motion-beat-aligned-v4"
 MOVE_SCORING_PHASES = 12
 _MOVE_MIN_SECONDS = 2.0
 _MOVE_MAX_SECONDS = 4.0
 _MOVE_CONFIDENCE = 0.20
 _MOVE_BODY_JOINTS = range(5, len(COCO17_KEYPOINTS))
+
+
+def _beat_grid_from_samples(samples: Any, sample_rate: int) -> dict[str, float] | None:
+    """Estimate a conservative beat period/phase from decoded mono PCM."""
+
+    import numpy as np
+
+    signal = np.asarray(samples, dtype=np.float32)
+    if sample_rate <= 0 or signal.size < sample_rate * 8:
+        return None
+    hop = max(1, round(sample_rate * 0.02))
+    window = max(hop, round(sample_rate * 0.05))
+    usable = signal.size - window
+    if usable <= 0:
+        return None
+    energy = np.array(
+        [np.mean(np.abs(signal[start : start + window])) for start in range(0, usable, hop)],
+        dtype=np.float64,
+    )
+    energy = np.log1p(20.0 * energy)
+    onset = np.maximum(0.0, np.diff(energy, prepend=energy[0]))
+    if onset.size < 100 or float(np.max(onset)) <= 1e-6:
+        return None
+    onset -= np.median(onset)
+    onset = np.maximum(0.0, onset)
+    frames_per_second = sample_rate / hop
+    minimum_lag = max(1, round(frames_per_second * 60 / 180))
+    maximum_lag = min(onset.size // 2, round(frames_per_second * 60 / 60))
+    correlations = []
+    for lag in range(minimum_lag, maximum_lag + 1):
+        left, right = onset[:-lag], onset[lag:]
+        denominator = math.sqrt(float(left @ left) * float(right @ right))
+        correlations.append(float(left @ right) / denominator if denominator else 0.0)
+    if not correlations:
+        return None
+    best_index = max(range(len(correlations)), key=correlations.__getitem__)
+    lag = minimum_lag + best_index
+    peak = correlations[best_index]
+    baseline = median(correlations)
+    confidence = max(0.0, min(1.0, (peak - baseline) / max(0.15, 1.0 - baseline)))
+    if peak < 0.28 or confidence < 0.50:
+        return None
+
+    if 0 < best_index < len(correlations) - 1:
+        before, center, after = correlations[best_index - 1 : best_index + 2]
+        curvature = before - 2 * center + after
+        if abs(curvature) > 1e-9:
+            lag += max(-0.5, min(0.5, 0.5 * (before - after) / curvature))
+
+    period = lag / frames_per_second
+    bpm = 60.0 / period
+    while bpm < 80:
+        bpm *= 2
+        period /= 2
+    while bpm > 160:
+        bpm /= 2
+        period *= 2
+    period_frames = max(1, round(period * frames_per_second))
+    phase_frame = max(
+        range(period_frames),
+        key=lambda offset: float(onset[offset::period_frames].sum()),
+    )
+    phase = phase_frame / frames_per_second
+    return {
+        "bpm": round(bpm, 4),
+        "beat_offset": round(phase, 4),
+        "beat_confidence": round(confidence, 4),
+    }
+
+
+def _detect_beat_grid(video: Path) -> dict[str, float] | None:
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        return None
+    sample_rate = 8_000
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg,
+                "-loglevel",
+                "error",
+                "-i",
+                str(video),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                str(sample_rate),
+                "-f",
+                "f32le",
+                "pipe:1",
+            ],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=60,
+        )
+        import numpy as np
+
+        return _beat_grid_from_samples(np.frombuffer(result.stdout, dtype="<f4"), sample_rate)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
 
 
 def _parse_lrc_text(text: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
@@ -712,7 +815,9 @@ def _motion_speed(first: Sequence, second: Sequence, seconds: float) -> float | 
     return distance / weight / seconds if weight and seconds > 0 else None
 
 
-def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
+def _move_boundaries(
+    frames: Sequence[dict[str, Any]], bpm: float | None = None, beat_offset: float = 0.0
+) -> list[tuple[int, int]]:
     if len(frames) < 2 or frames[-1]["time"] - frames[0]["time"] < _MOVE_MIN_SECONDS:
         return []
 
@@ -748,6 +853,26 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
     threshold = max(0.08, typical + 2.0 * deviation)
 
     boundaries = {0, len(frames) - 1}
+    half_beat = 30.0 / bpm if bpm and bpm > 0 else None
+
+    def grid_distance(index: int) -> float:
+        if half_beat is None:
+            return 0.0
+        phase = (frames[index]["time"] - beat_offset) / half_beat
+        return abs(phase - round(phase)) * half_beat
+
+    def snap(index: int) -> int:
+        if half_beat is None:
+            return index
+        nearby = [
+            candidate
+            for candidate in range(max(1, index - 4), min(len(frames) - 1, index + 5))
+            if abs(frames[candidate]["time"] - frames[index]["time"]) <= 0.20
+        ]
+        return min(
+            nearby,
+            key=lambda candidate: (grid_distance(candidate), abs(candidate - index)),
+        )
 
     def can_add(index: int) -> bool:
         ordered = sorted(boundaries)
@@ -767,6 +892,7 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
         and scores[index] >= scores[index + 1]
     ]
     for index in sorted(candidates, key=lambda item: (-scores[item], item)):
+        index = snap(index)
         if can_add(index):
             boundaries.add(index)
 
@@ -793,8 +919,8 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
         feasible = [
             index
             for index in range(left + 1, right)
-            if frames[index]["time"] - frames[left]["time"] >= 0.5
-            and frames[right]["time"] - frames[index]["time"] >= 0.5
+            if frames[index]["time"] - frames[left]["time"] >= _MOVE_MIN_SECONDS
+            and frames[right]["time"] - frames[index]["time"] >= _MOVE_MIN_SECONDS
         ]
         if not feasible:
             blocked.add((left, right))
@@ -808,10 +934,14 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
             near or feasible,
             key=lambda index: (
                 scores[index],
+                -grid_distance(index),
                 -abs(frames[index]["time"] - target),
                 -index,
             ),
         )
+        snapped = snap(choice)
+        if can_add(snapped):
+            choice = snapped
         boundaries.add(choice)
 
     ordered = sorted(boundaries)
@@ -949,7 +1079,10 @@ def _cluster_move_occurrences(occurrences: list[dict[str, Any]]) -> list[list[in
 
 
 def _build_move_scoring(
-    timeline: Sequence[dict[str, Any]], dancer_count: int
+    timeline: Sequence[dict[str, Any]],
+    dancer_count: int,
+    bpm: float | None = None,
+    beat_offset: float = 0.0,
 ) -> dict[str, Any]:
     artifact: dict[str, Any] = {
         "schema_version": MOVE_SCORING_SCHEMA_VERSION,
@@ -972,7 +1105,7 @@ def _build_move_scoring(
         dancer_index: [] for dancer_index in range(dancer_count)
     }
     segments = []
-    for start_index, end_index in _move_boundaries(frames):
+    for start_index, end_index in _move_boundaries(frames, bpm, beat_offset):
         start, end = frames[start_index]["time"], frames[end_index]["time"]
         segment = {"start": round(start, 3), "end": round(end, 3), "dancers": []}
         for dancer_index, samples in lanes.items():
@@ -1346,6 +1479,12 @@ def extract_song(
         raise ValueError("trim start and end remove the entire video")
     if hide_video_intro >= duration:
         raise ValueError("hidden video intro must end before the trimmed video")
+    beat_grid = _detect_beat_grid(video_path)
+    if beat_grid:
+        beat_period = 60.0 / beat_grid["bpm"]
+        beat_grid["beat_offset"] = round(
+            (beat_grid["beat_offset"] - trim_start) % beat_period, 4
+        )
     source_end = source_duration - trim_end
     frames = []
     for source_frame in analysis["frames"]:
@@ -1406,7 +1545,9 @@ def extract_song(
         "title": resolved_title,
         "artist": resolved_artist,
         "duration": duration,
-        "bpm": None,
+        "bpm": beat_grid["bpm"] if beat_grid else None,
+        "beat_offset": beat_grid["beat_offset"] if beat_grid else 0.0,
+        "beat_confidence": beat_grid["beat_confidence"] if beat_grid else 0.0,
         "key": "",
         "unlock_cost": 0,
         "palette": [],
@@ -1440,7 +1581,12 @@ def extract_song(
             "track_ids": analysis["track_ids"],
             "source": analysis["source"],
             "timeline": selected_timeline,
-            "move_scoring": _build_move_scoring(selected_timeline, selected_count),
+            "move_scoring": _build_move_scoring(
+                selected_timeline,
+                selected_count,
+                beat_grid["bpm"] if beat_grid else None,
+                beat_grid["beat_offset"] if beat_grid else 0.0,
+            ),
         },
         "extraction": analysis["processing"],
     }

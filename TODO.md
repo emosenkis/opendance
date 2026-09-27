@@ -219,7 +219,7 @@ ones where they conflict.
   strong. Capture the first good face-forward crop for every joined player and
   show it beside their nickname at the top of the gameplay screen, including
   players who join or return mid-song.
-- [ ] Next priority: use research on human/logical choreography versus detected
+- [x] Use research on human/logical choreography versus detected
   pose time series to cluster repeated occurrences of the same move into one
   reusable definition with identical scoring and cues. Evaluate phase-aligned
   motion features, distinctive still/key poses, and arrows on the one to three
@@ -229,7 +229,7 @@ ones where they conflict.
     DTW and complete-link distance, require compatible durations, choose an
     actual medoid (never an averaged synthetic pose), reuse its definition for
     scoring/cues, and render up to three salient-joint arrows.
-  - [ ] Next stage: derive candidate boundaries from beats/half-beats and
+  - [x] Derive candidate boundaries from beats/half-beats and
     smoothed joint-velocity minima, then validate thresholds on representative
     songs before replacing the current 2–4 second segmentation. Treat scene
     cuts as weak evidence; do not merge mirrors until evaluation shows they are
@@ -238,9 +238,10 @@ ones where they conflict.
       that stopped after one indivisible sparse interval and allowed later
       4.0–20.2 second moves, enforce the duration ceiling, favor smoothed
       velocity minima, and treat scene cuts only as a small score boost.
-    - [ ] Add beat/half-beat snapping only after extraction can obtain a
-      trustworthy BPM and beat phase from media rather than guessing from a
-      filename or assuming the song begins exactly on a downbeat.
+    - [x] Extract BPM and phase from decoded audio, reject uncertain estimates,
+      retime phase after trimming, and snap nearby kinematic boundaries to the
+      half-beat grid. Validation across 12 local videos intentionally accepted
+      only the three strongly periodic results at the conservative threshold.
   - Research basis: dance boundaries are probabilistic and benefit from audio
     plus bone motion ([Endo et al.](https://arxiv.org/abs/2405.19727)); bounded
     DTW supports separate pose/timing evaluation ([Kim & Kim](https://history.siggraph.org/wp-content/uploads/2022/01/2018-67-Kim_Interactive-Dance-Performance.pdf));
