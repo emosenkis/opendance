@@ -140,7 +140,7 @@ ones where they conflict.
 - [x] Change heads-up cues from a constant N-seconds-ahead live pose to the next
   discrete segmented dance move, using that move's authored representative cue
   pose rather than an arbitrary future video frame.
-- [ ] Experiment with clustering repeated occurrences of a move into one move
+- [x] Experiment with clustering repeated occurrences of a move into one move
   definition and identical scoring/cues; try a distinctive still pose or arrows
   on the one to three most important moving body parts instead of animation.
 - [x] Make every live-player-to-authored-dancer assignment unmistakable: use one
@@ -234,6 +234,13 @@ ones where they conflict.
     songs before replacing the current 2–4 second segmentation. Treat scene
     cuts as weak evidence; do not merge mirrors until evaluation shows they are
     semantically identical.
+    - [x] Validate schema-v2 output across 13 local packages; fix the splitter
+      that stopped after one indivisible sparse interval and allowed later
+      4.0–20.2 second moves, enforce the duration ceiling, favor smoothed
+      velocity minima, and treat scene cuts only as a small score boost.
+    - [ ] Add beat/half-beat snapping only after extraction can obtain a
+      trustworthy BPM and beat phase from media rather than guessing from a
+      filename or assuming the song begins exactly on a downbeat.
   - Research basis: dance boundaries are probabilistic and benefit from audio
     plus bone motion ([Endo et al.](https://arxiv.org/abs/2405.19727)); bounded
     DTW supports separate pose/timing evaluation ([Kim & Kim](https://history.siggraph.org/wp-content/uploads/2022/01/2018-67-Kim_Interactive-Dance-Performance.pdf));

@@ -12,9 +12,11 @@ import weakref
 from opendance.extract import (
     _build_move_scoring,
     _cluster_move_occurrences,
+    _move_boundaries,
     _rank_tracks,
     _record_tracks,
     _role_timeline,
+    _scoring_frames,
     _stitch_track_fragments,
     analyze_video,
     extract_song,
@@ -285,7 +287,7 @@ class MultiDancerTest(unittest.TestCase):
 
         artifact = _build_move_scoring(timeline, 2)
         self.assertEqual(artifact, _build_move_scoring(timeline, 2))
-        self.assertEqual(artifact["schema_version"], 2)
+        self.assertEqual(artifact["schema_version"], 3)
         self.assertEqual(artifact["phase_count"], 12)
         self.assertEqual(
             [(segment["start"], segment["end"]) for segment in artifact["segments"]],
@@ -362,6 +364,29 @@ class MultiDancerTest(unittest.TestCase):
         )
         self.assertEqual(artifact["definitions"], {})
         self.assertEqual(artifact["segments"], [])
+
+    def test_sparse_gap_does_not_leave_later_oversized_moves(self):
+        timeline = []
+        for time_s in [0, 0.25, 0.5, 8, 8.25, 8.5, 9, 10, 11, 12, 13, 14]:
+            timeline.append(
+                {
+                    "timestamp_ms": time_s * 1_000,
+                    "people": [
+                        {
+                            "dancer_index": 0,
+                            "keypoints": transformed("ready", 0.01 * time_s, 1),
+                        }
+                    ],
+                }
+            )
+
+        frames = _scoring_frames(timeline, 1)
+        boundaries = _move_boundaries(frames)
+
+        self.assertTrue(boundaries)
+        self.assertTrue(
+            all(frames[end]["time"] - frames[start]["time"] <= 4.05 for start, end in boundaries)
+        )
 
     def test_balanced_position_assignment(self):
         dancers = [0.2, 0.8]
@@ -709,7 +734,7 @@ class MultiDancerTest(unittest.TestCase):
         self.assertTrue(choreography["timeline"][3]["scene_cut"])
         self.assertIn(33, choreography["dancers"][0]["track_ids"])
         self.assertIn(44, choreography["dancers"][1]["track_ids"])
-        self.assertEqual(choreography["move_scoring"]["schema_version"], 2)
+        self.assertEqual(choreography["move_scoring"]["schema_version"], 3)
 
 
 if __name__ == "__main__":

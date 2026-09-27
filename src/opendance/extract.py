@@ -39,8 +39,8 @@ _ROLE_DISCONTINUITY = 0.72
 _ROLE_JUMP_MARGIN = 0.08
 _ROLE_MAX_SPEED = 0.8
 ROLE_ASSIGNMENT_METHOD = "bidirectional_track_stitch_with_spatial_shuffle_guard"
-MOVE_SCORING_SCHEMA_VERSION = 2
-MOVE_SCORING_FEATURE = "coco17-motion-clustered-v2"
+MOVE_SCORING_SCHEMA_VERSION = 3
+MOVE_SCORING_FEATURE = "coco17-motion-clustered-v3"
 MOVE_SCORING_PHASES = 12
 _MOVE_MIN_SECONDS = 2.0
 _MOVE_MAX_SECONDS = 4.0
@@ -736,10 +736,12 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
     for index in range(1, len(frames) - 1):
         before, after = energy[index], energy[index + 1]
         local = median(energy[max(1, index - 2) : min(len(energy), index + 3)])
+        minimum = min(before, after)
         scores[index] = (
             abs(after - before)
-            + max(0.0, local - min(before, after))
+            + 1.5 * max(0.0, local - minimum)
             + 0.1 * max(0.0, before - after)
+            + (0.04 if frames[index]["scene_cut"] else 0.0)
         )
     typical = median(scores[1:-1]) if len(scores) > 2 else 0.0
     deviation = median(abs(score - typical) for score in scores[1:-1]) if len(scores) > 2 else 0.0
@@ -757,10 +759,6 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
             and frames[right]["time"] - frames[index]["time"] >= _MOVE_MIN_SECONDS
         )
 
-    for index in range(1, len(frames) - 1):
-        if frames[index]["scene_cut"] and can_add(index):
-            boundaries.add(index)
-
     candidates = [
         index
         for index in range(1, len(frames) - 1)
@@ -772,12 +770,14 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
         if can_add(index):
             boundaries.add(index)
 
+    blocked: set[tuple[int, int]] = set()
     while True:
         oversized = next(
             (
                 (left, right)
                 for left, right in zip(sorted(boundaries), sorted(boundaries)[1:])
                 if frames[right]["time"] - frames[left]["time"] > _MOVE_MAX_SECONDS
+                and (left, right) not in blocked
             ),
             None,
         )
@@ -793,11 +793,12 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
         feasible = [
             index
             for index in range(left + 1, right)
-            if frames[index]["time"] - frames[left]["time"] >= _MOVE_MIN_SECONDS
-            and frames[right]["time"] - frames[index]["time"] >= _MOVE_MIN_SECONDS
+            if frames[index]["time"] - frames[left]["time"] >= 0.5
+            and frames[right]["time"] - frames[index]["time"] >= 0.5
         ]
         if not feasible:
-            break
+            blocked.add((left, right))
+            continue
         near = [
             index
             for index in feasible
@@ -814,7 +815,13 @@ def _move_boundaries(frames: Sequence[dict[str, Any]]) -> list[tuple[int, int]]:
         boundaries.add(choice)
 
     ordered = sorted(boundaries)
-    return list(zip(ordered, ordered[1:]))
+    return [
+        (left, right)
+        for left, right in zip(ordered, ordered[1:])
+        if _MOVE_MIN_SECONDS
+        <= frames[right]["time"] - frames[left]["time"]
+        <= _MOVE_MAX_SECONDS + 0.05
+    ]
 
 
 def _pose_at(samples: Sequence[tuple[float, Sequence]], time_s: float):
