@@ -16,6 +16,7 @@ from opendance.extract import (
     ROLE_ASSIGNMENT_METHOD,
     _atomic_json,
     _build_move_scoring,
+    _detect_beat_grid,
     _record_tracks,
     _role_timeline,
     _stitch_track_fragments,
@@ -63,6 +64,20 @@ def refresh_manifest(path: Path, *, dry_run: bool = False) -> bool:
         return True
 
     timeline = choreography["timeline"]
+    video = song.get("video")
+    video_path = Path(video) if isinstance(video, str) and video else None
+    if video_path is not None and not video_path.is_absolute():
+        video_path = path.parent / video_path
+    if song.get("bpm") is None and video_path is not None and video_path.is_file():
+        beat_grid = _detect_beat_grid(video_path)
+        if beat_grid:
+            period = 60.0 / beat_grid["bpm"]
+            beat_grid["beat_offset"] = round(
+                (beat_grid["beat_offset"] - float(song.get("media_start", 0.0)))
+                % period,
+                4,
+            )
+            song.update(beat_grid)
     refreshed_dancers = choreography.get("dancers")
     lead_dancer_index = choreography.get("lead_dancer_index")
     rerole = not roles_current and len(dancers) > 1

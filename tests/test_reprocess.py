@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from opendance.extract import ROLE_ASSIGNMENT_METHOD
 from opendance.game import named_pose
@@ -77,7 +78,11 @@ class ReprocessSongsTest(unittest.TestCase):
     def test_legacy_single_dancer_timeline_only_needs_scoring(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "song.json"
+            (path.parent / "video.mp4").write_bytes(b"video")
             song = {
+                "video": "video.mp4",
+                "media_start": 0.25,
+                "bpm": None,
                 "choreography": {
                     "dancers": [{"index": 0, "track_id": 7}],
                     "timeline": [
@@ -99,9 +104,20 @@ class ReprocessSongsTest(unittest.TestCase):
             path.write_text(json.dumps(song), encoding="utf-8")
             original = json.loads(path.read_text())
 
-            self.assertTrue(refresh_manifest(path))
+            with patch(
+                "tools.reprocess_songs._detect_beat_grid",
+                return_value={
+                    "bpm": 120.0,
+                    "beat_offset": 0.1,
+                    "beat_confidence": 0.8,
+                },
+            ):
+                self.assertTrue(refresh_manifest(path))
 
-            choreography = json.loads(path.read_text())["choreography"]
+            refreshed = json.loads(path.read_text())
+            choreography = refreshed["choreography"]
+            self.assertEqual(refreshed["bpm"], 120.0)
+            self.assertEqual(refreshed["beat_offset"], 0.35)
             self.assertEqual(
                 choreography["timeline"], original["choreography"]["timeline"]
             )
