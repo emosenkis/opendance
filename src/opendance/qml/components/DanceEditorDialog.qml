@@ -7,6 +7,7 @@ import QtMultimedia
 
 Dialog {
     id: dialog
+    objectName: "danceEditorDialog"
 
     required property var appBackend
     property real uiScale: 1
@@ -47,6 +48,13 @@ Dialog {
         appBackend.openDanceEditor()
         selectedMove = -1
         open()
+        chooseMove(0)
+    }
+
+    function jointName(index) {
+        return ["", "", "", "", "", "L shoulder", "R shoulder", "L elbow",
+                "R elbow", "L wrist", "R wrist", "L hip", "R hip", "L knee",
+                "R knee", "L ankle", "R ankle"][index] || "Joint"
     }
 
     parent: Overlay.overlay
@@ -56,8 +64,8 @@ Dialog {
     height: Math.min(parent ? parent.height * 0.94 : 680, 680 * uiScale)
     anchors.centerIn: parent
     padding: 18 * uiScale
-    title: "DANCE EDITOR — " + value("title", "")
-    standardButtons: Dialog.Close
+    header: null
+    footer: null
     onClosed: editorPlayer.stop()
 
     background: Rectangle {
@@ -69,6 +77,26 @@ Dialog {
 
     contentItem: ColumnLayout {
         spacing: 10 * dialog.uiScale
+
+        RowLayout {
+            Layout.fillWidth: true
+
+            Label {
+                Layout.fillWidth: true
+                text: "DANCE EDITOR — " + dialog.value("title", "")
+                color: "#ffffff"
+                font.pixelSize: 17 * dialog.uiScale
+                font.weight: Font.Black
+                font.letterSpacing: 1.2
+            }
+
+            NeonButton {
+                text: "CLOSE"
+                compact: true
+                accent: "#ff4fcb"
+                onClicked: dialog.close()
+            }
+        }
 
         Label {
             Layout.fillWidth: true
@@ -162,10 +190,16 @@ Dialog {
                 }
             }
 
-            ColumnLayout {
-                Layout.preferredWidth: 430 * dialog.uiScale
+            ScrollView {
+                Layout.preferredWidth: Math.max(410, 500 * dialog.uiScale)
                 Layout.fillHeight: true
-                spacing: 7 * dialog.uiScale
+                clip: true
+                contentWidth: availableWidth
+                ScrollBar.vertical.policy: ScrollBar.AlwaysOn
+
+                ColumnLayout {
+                    width: parent.availableWidth
+                    spacing: 7 * dialog.uiScale
 
                 Label {
                     text: "MOVES"
@@ -177,7 +211,7 @@ Dialog {
                 ListView {
                     id: moveList
                     Layout.fillWidth: true
-                    Layout.fillHeight: true
+                    Layout.preferredHeight: 205 * dialog.uiScale
                     clip: true
                     spacing: 4
                     model: dialog.value("segments", [])
@@ -212,7 +246,7 @@ Dialog {
                 RowLayout {
                     Layout.fillWidth: true
                     Label {
-                        text: "CUE ARROW JOINT"
+                        text: dialog.jointName(cueJoint.value).toUpperCase()
                         color: "#ffe66d"
                         font.weight: Font.Bold
                     }
@@ -260,17 +294,18 @@ Dialog {
                         enabled: dialog.selectedMove >= 0
                         onClicked: dialog.edit("cue", {"delta": 1})
                     }
-                    NeonButton {
-                        Layout.fillWidth: true
-                        compact: true
-                        text: dialog.selectedMove >= 0
-                              && dialog.value("segments", [])[dialog.selectedMove].power
-                              ? "NORMAL" : "POWER MOVE"
-                        enabled: dialog.selectedMove >= 0
-                        onClicked: dialog.edit("power", {
-                            "enabled": !dialog.value("segments", [])[dialog.selectedMove].power
-                        })
-                    }
+                }
+
+                NeonButton {
+                    Layout.fillWidth: true
+                    compact: true
+                    text: dialog.selectedMove >= 0
+                          && dialog.value("segments", [])[dialog.selectedMove].power
+                          ? "REMOVE POWER MOVE" : "MARK AS POWER MOVE"
+                    enabled: dialog.selectedMove >= 0
+                    onClicked: dialog.edit("power", {
+                        "enabled": !dialog.value("segments", [])[dialog.selectedMove].power
+                    })
                 }
 
                 RowLayout {
@@ -290,12 +325,14 @@ Dialog {
                         validator: DoubleValidator { bottom: 0 }
                         onEditingFinished: dialog.rangeEnd = Number(text)
                     }
-                    NeonButton {
-                        compact: true
-                        text: "MASK"
-                        onClicked: dialog.edit("mask", {"start": dialog.rangeStart,
-                                                        "end": dialog.rangeEnd})
-                    }
+                }
+
+                NeonButton {
+                    Layout.fillWidth: true
+                    compact: true
+                    text: "MASK RANGE FROM CUES AND SCORING"
+                    onClicked: dialog.edit("mask", {"start": dialog.rangeStart,
+                                                    "end": dialog.rangeEnd})
                 }
 
                 RowLayout {
@@ -305,15 +342,17 @@ Dialog {
                     SpinBox { id: firstDancer; from: 1; to: dialog.value("dancer_count", 1) }
                     Label { text: "↔"; color: "#ffffff" }
                     SpinBox { id: secondDancer; from: 1; to: dialog.value("dancer_count", 1); value: 2 }
-                    NeonButton {
-                        Layout.fillWidth: true
-                        compact: true
-                        text: "SWAP IN RANGE"
-                        onClicked: dialog.edit("swap", {"start": dialog.rangeStart,
-                                                        "end": dialog.rangeEnd,
-                                                        "first": firstDancer.value - 1,
-                                                        "second": secondDancer.value - 1})
-                    }
+                }
+
+                NeonButton {
+                    Layout.fillWidth: true
+                    visible: Number(dialog.value("dancer_count", 0)) > 1
+                    compact: true
+                    text: "SWAP DANCERS IN RANGE"
+                    onClicked: dialog.edit("swap", {"start": dialog.rangeStart,
+                                                    "end": dialog.rangeEnd,
+                                                    "first": firstDancer.value - 1,
+                                                    "second": secondDancer.value - 1})
                 }
 
                 RowLayout {
@@ -330,6 +369,7 @@ Dialog {
                         text: "REMOVE MASK"
                         onClicked: dialog.edit("unmask", {"mask": maskIndex.value - 1})
                     }
+                }
                 }
             }
         }
