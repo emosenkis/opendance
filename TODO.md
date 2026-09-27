@@ -82,8 +82,13 @@ ones where they conflict.
   do not use it for live scoring until it proves both accurate and fast.
 - [x] Do not replace pose/spatial tracking with face recognition: faces vanish
   during turns and occlusion, so it does not simplify reliable dance tracking.
-- [ ] Add optional sparse, RAM-only face re-identification if real crossing and
-  re-entry tests show ByteTrack plus spatial rebind is insufficient.
+- [x] Add sparse, RAM-only face re-identification in addition to tracker,
+  motion, location, and clothing continuity. Capture one normalized compact
+  face descriptor per good forward-facing tracker identity, retain it only in
+  memory, use it to reclaim a lost player slot for up to 30 seconds even after
+  a large position change, fall back conservatively to short-term
+  clothing/location continuity when the face match is uncertain, and never
+  write biometric descriptors into settings or song/player files.
 - [ ] Add consented local player profiles for scores/unlocks, initially with
   manual UUIDs; only add persistent biometric fingerprints after a reviewed,
   revocable privacy-preserving design and false-match evaluation.

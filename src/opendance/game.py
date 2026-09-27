@@ -988,6 +988,7 @@ class PlayerSlot:
     visible: bool = False
     active: bool = False
     fingerprint: tuple[float, ...] | None = None
+    face_fingerprint: tuple[float, ...] | None = None
 
     @property
     def player_number(self) -> int:
@@ -1008,12 +1009,14 @@ class PlayerSlots:
         leave_after: float = 0.75,
         rebind_seconds: float = 4.0,
         rebind_distance: float = 0.40,
+        face_rebind_seconds: float = 30.0,
     ) -> None:
         if not 1 <= max_players <= 6:
             raise ValueError("max_players must be between 1 and 6")
         self.leave_after = float(leave_after)
         self.rebind_seconds = float(rebind_seconds)
         self.rebind_distance = float(rebind_distance)
+        self.face_rebind_seconds = float(face_rebind_seconds)
         self.slots = [PlayerSlot(index) for index in range(max_players)]
 
     @property
@@ -1038,6 +1041,7 @@ class PlayerSlots:
         pose: Pose,
         now: float,
         fingerprint: Sequence[float] | None = None,
+        face_fingerprint: Sequence[float] | None = None,
     ) -> None:
         if slot.joined_at is None:
             slot.joined_at = now
@@ -1056,12 +1060,24 @@ class PlayerSlots:
                     for old, new in zip(slot.fingerprint, incoming)
                 )
             )
+        if face_fingerprint:
+            incoming_face = tuple(float(value) for value in face_fingerprint)
+            slot.face_fingerprint = (
+                incoming_face
+                if slot.face_fingerprint is None
+                or len(slot.face_fingerprint) != len(incoming_face)
+                else tuple(
+                    old * 0.9 + new * 0.1
+                    for old, new in zip(slot.face_fingerprint, incoming_face)
+                )
+            )
 
     def update(
         self,
         tracks: Mapping[TrackId, Sequence],
         now: float,
         fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
+        face_fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
     ) -> list[PlayerSlot]:
         """Update bindings and return currently active slots in player order.
 
@@ -1072,6 +1088,7 @@ class PlayerSlots:
 
         timestamp = float(now)
         fingerprints = fingerprints or {}
+        face_fingerprints = face_fingerprints or {}
         incoming = {track_id: _coerce_pose(pose) for track_id, pose in tracks.items()}
         for slot in self.slots:
             slot.visible = False
@@ -1085,6 +1102,7 @@ class PlayerSlots:
                     unmatched.pop(slot.track_id),
                     timestamp,
                     fingerprints.get(slot.track_id),
+                    face_fingerprints.get(slot.track_id),
                 )
 
         # Greedily match new ids to nearby recently-lost slots.
@@ -1093,7 +1111,10 @@ class PlayerSlots:
             center = _pose_center(pose)
             for slot in self.slots:
                 age = timestamp - slot.last_seen
-                if slot.visible or slot.pose is None or not 0.0 <= age <= self.rebind_seconds:
+                face_fingerprint = face_fingerprints.get(track_id)
+                can_compare_face = bool(face_fingerprint and slot.face_fingerprint)
+                maximum_age = self.face_rebind_seconds if can_compare_face else self.rebind_seconds
+                if slot.visible or slot.pose is None or not 0.0 <= age <= maximum_age:
                     continue
                 distance = math.dist(center, slot.center)
                 fingerprint = fingerprints.get(track_id)
@@ -1105,9 +1126,31 @@ class PlayerSlots:
                             for left, right in zip(fingerprint, slot.fingerprint)
                         )
                     )
-                if appearance is not None and appearance <= 0.45 and distance <= 0.75:
+                face_distance = None
+                if (
+                    can_compare_face
+                    and len(face_fingerprint) == len(slot.face_fingerprint)
+                ):
+                    face_distance = math.sqrt(
+                        sum(
+                            (float(left) - right) ** 2
+                            for left, right in zip(face_fingerprint, slot.face_fingerprint)
+                        )
+                    )
+                if face_distance is not None and face_distance <= 0.60:
+                    possible.append((face_distance * 2.0 + distance * 0.2, slot.index, track_id))
+                elif (
+                    age <= self.rebind_seconds
+                    and appearance is not None
+                    and appearance <= 0.45
+                    and distance <= 0.75
+                ):
                     possible.append((distance + appearance * 1.5, slot.index, track_id))
-                elif appearance is None and distance <= self.rebind_distance:
+                elif (
+                    age <= self.rebind_seconds
+                    and appearance is None
+                    and distance <= self.rebind_distance
+                ):
                     possible.append((distance, slot.index, track_id))
         claimed_slots: set[int] = set()
         claimed_tracks: set[TrackId] = set()
@@ -1120,6 +1163,7 @@ class PlayerSlots:
                 unmatched[track_id],
                 timestamp,
                 fingerprints.get(track_id),
+                face_fingerprints.get(track_id),
             )
             claimed_slots.add(slot_index)
             claimed_tracks.add(track_id)
@@ -1129,15 +1173,45 @@ class PlayerSlots:
         # Expired reservations become ordinary free slots.  If all slots are
         # reserved, an actually-departed (not merely flickering) slot is reusable.
         for slot in self.slots:
-            if not slot.visible and timestamp - slot.last_seen > self.rebind_seconds:
+            if (
+                not slot.visible
+                and timestamp - slot.last_seen > self.rebind_seconds
+            ):
                 slot.track_id = None
-                slot.pose = None
-                slot.joined_at = None
+                if (
+                    slot.face_fingerprint is None
+                    or timestamp - slot.last_seen > self.face_rebind_seconds
+                ):
+                    slot.pose = None
+                    slot.joined_at = None
+                    slot.fingerprint = None
+                    slot.face_fingerprint = None
         for track_id, pose in unmatched.items():
-            free = next((slot for slot in self.slots if slot.track_id is None and not slot.visible), None)
+            free = next(
+                (
+                    slot
+                    for slot in self.slots
+                    if slot.track_id is None and slot.joined_at is None and not slot.visible
+                ),
+                None,
+            )
+            if free is None:
+                free = next(
+                    (slot for slot in self.slots if slot.track_id is None and not slot.visible),
+                    None,
+                )
             if free is not None:
                 free.joined_at = timestamp
-                self._bind(free, track_id, pose, timestamp, fingerprints.get(track_id))
+                free.fingerprint = None
+                free.face_fingerprint = None
+                self._bind(
+                    free,
+                    track_id,
+                    pose,
+                    timestamp,
+                    fingerprints.get(track_id),
+                    face_fingerprints.get(track_id),
+                )
 
         for slot in self.slots:
             slot.active = slot.visible or timestamp - slot.last_seen <= self.leave_after
@@ -1397,6 +1471,7 @@ class GameSession:
         time_s: float,
         tracks: Mapping[TrackId, Sequence],
         fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
+        face_fingerprints: Mapping[TrackId, Sequence[float]] | None = None,
     ) -> list[MoveFeedback]:
         """Update players and judge every move cue crossed since the last frame.
 
@@ -1408,7 +1483,7 @@ class GameSession:
         previous_joins = {
             slot.index: slot.joined_at for slot in self.player_slots.slots
         }
-        self.player_slots.update(tracks, now, fingerprints)
+        self.player_slots.update(tracks, now, fingerprints, face_fingerprints)
         for slot in self.player_slots.active_slots:
             if slot.joined_at != previous_joins[slot.index]:
                 self.scores[slot.index] = PlayerScore(slot.index)

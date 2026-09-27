@@ -146,6 +146,41 @@ class GameCoreTest(unittest.TestCase):
         self.assertNotEqual(slots.slots[0].track_id, 33)
         self.assertEqual(slots.slots[1].track_id, 33)
 
+    def test_face_fingerprint_rebinds_after_long_loss_and_large_position_change(self):
+        slots = PlayerSlots(
+            max_players=2,
+            leave_after=0.5,
+            rebind_seconds=2.0,
+            face_rebind_seconds=30.0,
+        )
+        face, stranger = [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]
+        slots.update(
+            {11: shifted("ready", -0.3)},
+            0.0,
+            {11: [1.0, 0.0]},
+            {11: face},
+        )
+        joined_at = slots.slots[0].joined_at
+        slots.update({}, 5.0)
+
+        slots.update(
+            {22: shifted("ready", 0.3)},
+            5.2,
+            {22: [0.0, 1.0]},
+            {22: face},
+        )
+        self.assertEqual(slots.slots[0].track_id, 22)
+        self.assertEqual(slots.slots[0].joined_at, joined_at)
+
+        slots.update({}, 8.0)
+        slots.update(
+            {33: shifted("ready", -0.25)},
+            8.2,
+            {33: [1.0, 0.0]},
+            {33: stranger},
+        )
+        self.assertEqual(slots.slots[1].track_id, 33)
+
     def test_new_player_does_not_inherit_an_expired_slots_score(self):
         song = {
             "id": "handoff",

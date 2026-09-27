@@ -16,6 +16,7 @@ from opendance.app import (
     FEEDBACK_INTERVAL_SECONDS,
     MAX_PLAYERS,
     SleepInhibitor,
+    _face_descriptor,
     _video_thumbnail,
     _enabled,
     _feedback_due,
@@ -30,6 +31,19 @@ from opendance.player import load_player_song
 
 
 class PlaybackPolicyTest(unittest.TestCase):
+    def test_face_descriptor_is_compact_and_normalized(self):
+        import numpy as np
+
+        crop = np.zeros((48, 48, 3), dtype=np.uint8)
+        crop[8:20, 8:20] = 180
+        crop[8:20, 28:40] = 180
+        crop[28:40, 16:32] = 230
+
+        descriptor = _face_descriptor(crop)
+
+        self.assertEqual(len(descriptor), 63)
+        self.assertAlmostEqual(sum(value * value for value in descriptor), 1.0, places=5)
+
     def test_alternate_sources_require_an_explicit_true_value(self):
         for value in ("1", "true", "YES", "on"):
             self.assertTrue(_enabled(value))

@@ -276,8 +276,25 @@ def _interpolated_media_time(
     return position_s + max(0.0, now - updated_at) if playing and updated_at is not None else position_s
 
 
-def _appearance_from_frame(frame: Any, person: dict[str, Any]) -> tuple[list[float], str]:
-    """Build an in-memory clothing fingerprint and optional face-forward crop."""
+def _face_descriptor(crop: Any) -> list[float]:
+    """Return a small illumination-normalized RAM-only face fingerprint."""
+
+    import cv2
+    import numpy as np
+
+    if crop is None or crop.size == 0:
+        return []
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    gray = cv2.equalizeHist(cv2.resize(gray, (32, 32)))
+    coefficients = cv2.dct(gray.astype(np.float32) / 255.0)[:8, :8].reshape(-1)[1:]
+    norm = float(np.linalg.norm(coefficients))
+    return (coefficients / norm).astype(float).tolist() if norm > 1e-6 else []
+
+
+def _appearance_from_frame(
+    frame: Any, person: dict[str, Any], *, analyze_face: bool = True
+) -> tuple[list[float], str, list[float]]:
+    """Build clothing and optional face fingerprints without persisting either."""
 
     import cv2
     import numpy as np
@@ -299,6 +316,7 @@ def _appearance_from_frame(frame: Any, person: dict[str, Any]) -> tuple[list[flo
             descriptor.extend((values / total).tolist())
 
     face = ""
+    face_descriptor: list[float] = []
     points = person.get("keypoints", ())
     if len(points) >= 5 and all(len(points[index]) >= 3 for index in (0, 1, 2)):
         nose, left_eye, right_eye = (points[index] for index in (0, 1, 2))
@@ -312,7 +330,8 @@ def _appearance_from_frame(frame: Any, person: dict[str, Any]) -> tuple[list[flo
             fy1 = max(0, round((center_y - size * 0.55) * height))
             fy2 = min(height, round((center_y + size * 0.45) * height))
             crop = frame[fy1:fy2, fx1:fx2]
-            if crop.shape[0] >= 20 and crop.shape[1] >= 20:
+            if analyze_face and crop.shape[0] >= 20 and crop.shape[1] >= 20:
+                face_descriptor = _face_descriptor(crop)
                 encoded, jpeg = cv2.imencode(
                     ".jpg", crop, [cv2.IMWRITE_JPEG_QUALITY, 78]
                 )
@@ -320,7 +339,7 @@ def _appearance_from_frame(frame: Any, person: dict[str, Any]) -> tuple[list[flo
                     face = "data:image/jpeg;base64," + base64.b64encode(
                         jpeg.tobytes()
                     ).decode("ascii")
-    return descriptor, face
+    return descriptor, face, face_descriptor
 
 
 class PoseThread(threading.Thread):
@@ -334,7 +353,8 @@ class PoseThread(threading.Thread):
         self.reset_event = threading.Event()
         self.engine: Any = None
         self._reported_device = False
-        self._face_tracks: set[Any] = set()
+        self._face_tracks: dict[Any, list[float]] = {}
+        self._face_frame = 0
 
     def submit(self, image: QImage, captured_ms: float) -> None:
         while True:
@@ -381,14 +401,32 @@ class PoseThread(threading.Thread):
                 frame = np.frombuffer(bgr.constBits(), dtype=np.uint8, count=stride * height)
                 frame = frame.reshape(height, stride)[:, : width * 3].reshape(height, width, 3).copy()
                 result = self.engine.infer(frame, captured_ms=captured_ms)
+                self._face_frame += 1
                 for person in result.get("people", ()):
-                    descriptor, face = _appearance_from_frame(frame, person)
+                    track_id = person.get("track_id")
+                    new_face = track_id is not None and track_id not in self._face_tracks
+                    descriptor, face, face_descriptor = _appearance_from_frame(
+                        frame,
+                        person,
+                        analyze_face=track_id is not None
+                        and (new_face or self._face_frame % 15 == 0),
+                    )
                     if descriptor:
                         person["appearance"] = descriptor
-                    track_id = person.get("track_id")
-                    if face and track_id not in self._face_tracks:
+                    if face_descriptor and track_id is not None:
+                        previous = self._face_tracks.get(track_id)
+                        if previous and len(previous) == len(face_descriptor):
+                            combined = [
+                                old * 0.8 + new * 0.2
+                                for old, new in zip(previous, face_descriptor)
+                            ]
+                            norm = math.sqrt(sum(value * value for value in combined)) or 1.0
+                            face_descriptor = [value / norm for value in combined]
+                        self._face_tracks[track_id] = face_descriptor
+                    if track_id in self._face_tracks:
+                        person["face_appearance"] = self._face_tracks[track_id]
+                    if face and new_face:
                         person["face"] = face
-                        self._face_tracks.add(track_id)
                 if not self._reported_device:
                     print(
                         f"OpenDance pose: {result.get('device', 'unknown')} "
@@ -407,6 +445,7 @@ class PoseThread(threading.Thread):
     def reset(self) -> None:
         self.reset_event.set()
         self._face_tracks.clear()
+        self._face_frame = 0
         while not self.frames.empty():
             try:
                 self.frames.get_nowait()
@@ -1973,8 +2012,15 @@ class Backend(QObject):
             for person in self._pose_people
             if person.get("track_id") is not None and person.get("appearance")
         }
+        face_fingerprints = {
+            int(person["track_id"]): person["face_appearance"]
+            for person in self._pose_people
+            if person.get("track_id") is not None and person.get("face_appearance")
+        }
         scoring_time = max(0.0, self._song_time - self._latency_ms / 1000.0)
-        new_feedback = self._session.update(scoring_time, tracks, fingerprints)
+        new_feedback = self._session.update(
+            scoring_time, tracks, fingerprints, face_fingerprints
+        )
         for person in self._pose_people:
             if not person.get("face") or person.get("track_id") is None:
                 continue
