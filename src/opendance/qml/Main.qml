@@ -154,6 +154,13 @@ ApplicationWindow {
             moveSong(delta)
     }
 
+    function moveVertical(delta) {
+        if (screenName === "library")
+            moveSongRow(delta)
+        else
+            moveFocus(delta > 0)
+    }
+
     function syncSongSelection() {
         var index = Number(backend.selectedSongIndex)
         if (songList.count > 0 && index >= 0 && index < songList.count
@@ -291,25 +298,25 @@ ApplicationWindow {
     Shortcut {
         sequence: "W"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveFocus(false)
+        onActivated: window.moveVertical(-1)
     }
 
     Shortcut {
         sequence: "S"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveFocus(true)
+        onActivated: window.moveVertical(1)
     }
 
     Shortcut {
         sequence: "Up"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveFocus(false)
+        onActivated: window.moveVertical(-1)
     }
 
     Shortcut {
         sequence: "Down"
         context: Qt.ApplicationShortcut
-        onActivated: window.moveFocus(true)
+        onActivated: window.moveVertical(1)
     }
 
     StageBackground {
