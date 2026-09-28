@@ -90,6 +90,28 @@ class DanceEditorTest(unittest.TestCase):
         self.assertEqual(segment["end"], first["end"])
         self.assertTrue(all(item["definition"].startswith("edit") for item in segment["dancers"]))
 
+    def test_cues_can_be_edited_for_one_dancer(self):
+        song = extracted_song()
+        scoring = song["choreography"]["move_scoring"]
+        segment = scoring["segments"][0]
+        before = {
+            dancer["dancer_index"]: scoring["definitions"][dancer["definition"]]["cue_sample"]
+            for dancer in segment["dancers"]
+        }
+
+        edited = apply_edit(
+            song,
+            {"action": "cue", "segment": 0, "delta": -1, "dancer_index": 1},
+        )
+        edited_scoring = edited["choreography"]["move_scoring"]
+        after = {
+            dancer["dancer_index"]: edited_scoring["definitions"][dancer["definition"]]["cue_sample"]
+            for dancer in edited_scoring["segments"][0]["dancers"]
+        }
+
+        self.assertEqual(after[0], before[0])
+        self.assertNotEqual(after[1], before[1])
+
     def test_save_is_atomic_backed_up_and_exposes_editor_state(self):
         with TemporaryDirectory() as directory:
             path = Path(directory) / "song.json"

@@ -5,9 +5,11 @@ Item {
 
     property var people: []
     property color lineColor: "#55f7ff"
+    property color arrowColor: "#ffe66d"
     property bool mirror: true
     property bool showBoxes: true
     property bool showLabels: true
+    property bool fitSinglePerson: false
     property real minimumConfidence: 0.2
     property real lineScale: 1.0
 
@@ -44,10 +46,52 @@ Item {
         }
     }
 
+    function fittedBounds(person) {
+        if (!fitSinglePerson)
+            return null
+        var visible = []
+        var joints = keypoints(person)
+        for (var index = 0; index < joints.length; ++index) {
+            var joint = point(joints[index])
+            if (joint.c >= minimumConfidence)
+                visible.push(joint)
+        }
+        var arrows = person && person.cue_arrows ? person.cue_arrows : []
+        for (var arrowIndex = 0; arrowIndex < arrows.length; ++arrowIndex) {
+            if (arrows[arrowIndex].from)
+                visible.push(point(arrows[arrowIndex].from))
+            if (arrows[arrowIndex].to)
+                visible.push(point(arrows[arrowIndex].to))
+        }
+        if (!visible.length)
+            return null
+        var xs = visible.map(function(value) { return root.mirror ? 1 - value.x : value.x })
+        var ys = visible.map(function(value) { return value.y })
+        return { "left": Math.min.apply(null, xs), "right": Math.max.apply(null, xs),
+                 "top": Math.min.apply(null, ys), "bottom": Math.max.apply(null, ys) }
+    }
+
+    function canvasPoint(keypoint, bounds) {
+        var value = point(keypoint)
+        var x = root.mirror ? 1 - value.x : value.x
+        if (!bounds)
+            return { "x": x * canvas.width, "y": value.y * canvas.height }
+        var margin = Math.min(canvas.width, canvas.height) * 0.12
+        var spanX = Math.max(0.05, bounds.right - bounds.left)
+        var spanY = Math.max(0.05, bounds.bottom - bounds.top)
+        var scale = Math.min((canvas.width - 2 * margin) / spanX,
+                             (canvas.height - 2 * margin) / spanY)
+        var left = (canvas.width - spanX * scale) / 2
+        var top = (canvas.height - spanY * scale) / 2
+        return { "x": left + (x - bounds.left) * scale,
+                 "y": top + (value.y - bounds.top) * scale }
+    }
+
     function paintSkeleton(context, person, personIndex) {
         var joints = keypoints(person)
         if (!joints || joints.length < 1)
             return
+        var bounds = fittedBounds(person)
 
         var links = [
             [5, 7], [7, 9], [6, 8], [8, 10], [5, 6],
@@ -68,9 +112,11 @@ Item {
             var second = point(joints[links[i][1]])
             if (first.c < root.minimumConfidence || second.c < root.minimumConfidence)
                 continue
+            var firstCanvas = canvasPoint(first, bounds)
+            var secondCanvas = canvasPoint(second, bounds)
             context.beginPath()
-            context.moveTo((root.mirror ? 1 - first.x : first.x) * canvas.width, first.y * canvas.height)
-            context.lineTo((root.mirror ? 1 - second.x : second.x) * canvas.width, second.y * canvas.height)
+            context.moveTo(firstCanvas.x, firstCanvas.y)
+            context.lineTo(secondCanvas.x, secondCanvas.y)
             context.stroke()
         }
 
@@ -78,26 +124,28 @@ Item {
             var current = point(joints[joint])
             if (current.c < root.minimumConfidence)
                 continue
+            var currentCanvas = canvasPoint(current, bounds)
             context.beginPath()
             context.fillStyle = joint % 2 === 0 ? "#ffffff" : context.strokeStyle
-            context.arc((root.mirror ? 1 - current.x : current.x) * canvas.width,
-                        current.y * canvas.height,
+            context.arc(currentCanvas.x, currentCanvas.y,
                         Math.max(2.3, context.lineWidth * 0.72), 0, Math.PI * 2)
             context.fill()
         }
 
         var arrows = person && person.cue_arrows ? person.cue_arrows : []
-        context.strokeStyle = "#ffe66d"
-        context.fillStyle = "#ffe66d"
+        context.strokeStyle = root.arrowColor
+        context.fillStyle = root.arrowColor
         context.lineWidth = Math.max(3, context.lineWidth * 1.35)
         for (var arrowIndex = 0; arrowIndex < arrows.length; ++arrowIndex) {
             var arrow = arrows[arrowIndex]
             if (!arrow.from || !arrow.to)
                 continue
-            var fromX = (root.mirror ? 1 - number(arrow.from[0], 0) : number(arrow.from[0], 0)) * canvas.width
-            var fromY = number(arrow.from[1], 0) * canvas.height
-            var toX = (root.mirror ? 1 - number(arrow.to[0], 0) : number(arrow.to[0], 0)) * canvas.width
-            var toY = number(arrow.to[1], 0) * canvas.height
+            var from = canvasPoint(arrow.from, bounds)
+            var to = canvasPoint(arrow.to, bounds)
+            var fromX = from.x
+            var fromY = from.y
+            var toX = to.x
+            var toY = to.y
             var angle = Math.atan2(toY - fromY, toX - fromX)
             var head = Math.max(7, context.lineWidth * 2.5)
             context.beginPath()
@@ -131,14 +179,13 @@ Item {
         if (root.showLabels) {
             var label = person && person.name !== undefined ? person.name
                       : "DANCER"
-            var anchor = point(joints[0])
+            var anchor = canvasPoint(joints[0], bounds)
             context.shadowBlur = 0
             context.fillStyle = "#ffffff"
             context.font = "bold " + Math.max(10, canvas.height * 0.045) + "px sans-serif"
             context.textAlign = "center"
             context.fillText(label,
-                             (root.mirror ? 1 - anchor.x : anchor.x) * canvas.width,
-                             Math.max(16, anchor.y * canvas.height - 14))
+                             anchor.x, Math.max(16, anchor.y - 14))
         }
     }
 
@@ -162,4 +209,5 @@ Item {
     onWidthChanged: canvas.requestPaint()
     onHeightChanged: canvas.requestPaint()
     onMirrorChanged: canvas.requestPaint()
+    onFitSinglePersonChanged: canvas.requestPaint()
 }

@@ -179,18 +179,24 @@ def apply_edit(song: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
     elif action == "cue":
         _, segment = _segment(scoring, values.get("segment"))
         delta = int(values.get("delta", 0))
+        selected = values.get("dancer_index")
         if delta not in {-1, 1}:
             raise ValueError("cue adjustment must be one frame earlier or later")
         for dancer in segment.get("dancers", []):
+            if selected is not None and int(dancer.get("dancer_index", -1)) != int(selected):
+                continue
             definition = scoring["definitions"].get(dancer.get("definition"))
             if isinstance(definition, dict):
                 _refresh_cue(definition, int(definition.get("cue_sample", 0)) + delta)
     elif action == "joint":
         _, segment = _segment(scoring, values.get("segment"))
         joint = int(values.get("joint", -1))
+        selected = values.get("dancer_index")
         if not 5 <= joint <= 16:
             raise ValueError("cue joint must be a COCO body joint from 5 through 16")
         for dancer in segment.get("dancers", []):
+            if selected is not None and int(dancer.get("dancer_index", -1)) != int(selected):
+                continue
             definition = scoring["definitions"].get(dancer.get("definition"))
             if not isinstance(definition, dict):
                 continue
@@ -262,6 +268,10 @@ def editor_state(song: dict[str, Any], manifest: Path) -> dict[str, Any]:
                 "end": float(segment["end"]),
                 "power": bool(segment.get("power")),
                 "cue": round(sum(cues) / len(cues)) if cues else 0,
+                "dancers": [
+                    int(dancer["dancer_index"])
+                    for dancer in segment.get("dancers", [])
+                ],
             }
         )
     video = song.get("video")

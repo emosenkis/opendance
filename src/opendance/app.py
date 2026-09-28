@@ -684,6 +684,7 @@ class Backend(QObject):
         self._dance_editor: dict[str, Any] = {}
         self._dance_editor_frames: list[dict[str, Any]] = []
         self._dance_editor_times: list[float] = []
+        self._dance_editor_session: GameSession | None = None
 
         self._vision_result.connect(self._on_pose_result)
         self._vision_status.connect(self._set_model_status)
@@ -1074,6 +1075,7 @@ class Backend(QObject):
 
     @Slot()
     def openDanceEditor(self) -> None:
+        self._dance_editor_session = None
         manifest = self._selected_song_metadata.get("_manifest")
         if not manifest:
             self._dance_editor = {"status": "Choose an imported or extracted song first."}
@@ -1089,6 +1091,7 @@ class Backend(QObject):
                     float(frame.get("timestamp_ms", 0.0)) / 1_000.0
                     for frame in self._dance_editor_frames
                 ]
+                self._dance_editor_session = GameSession(self._selected_song)
             except (OSError, TypeError, ValueError) as exc:
                 self._dance_editor = {"status": f"Cannot edit this song: {exc}"}
         self.danceEditorChanged.emit()
@@ -1113,6 +1116,7 @@ class Backend(QObject):
                 float(frame.get("timestamp_ms", 0.0)) / 1_000.0
                 for frame in self._dance_editor_frames
             ]
+            self._dance_editor_session = GameSession(edited)
             self.changed.emit()
         except (OSError, TypeError, ValueError) as exc:
             self._dance_editor["status"] = f"Edit failed: {exc}"
@@ -1132,30 +1136,18 @@ class Backend(QObject):
         self._dance_editor["people"] = self._dance_editor_frames[index].get("people", [])
         self.danceEditorChanged.emit()
 
-    @Slot(int)
-    def previewDanceMove(self, index: int) -> None:
-        if self._loaded_song is None:
+    @Slot(float, bool, int)
+    def previewDanceCue(self, time_s: float, synchronized: bool, index: int) -> None:
+        if self._dance_editor_session is None:
             return
-        scoring = self._loaded_song.get("choreography", {}).get("move_scoring", {})
-        try:
-            segment = scoring["segments"][index]
-        except (IndexError, KeyError, TypeError):
-            return
-        people = []
-        for dancer in segment.get("dancers", []):
-            definition = scoring.get("definitions", {}).get(dancer.get("definition"), {})
-            poses = definition.get("poses", [])
-            cue = int(definition.get("cue_sample", len(poses) // 2))
-            if not 0 <= cue < len(poses):
-                continue
-            people.append(
-                {
-                    "dancer_index": dancer.get("dancer_index", 0),
-                    "keypoints": poses[cue],
-                    "cue_arrows": definition.get("cue_arrows", []),
-                }
-            )
-        self._dance_editor["people"] = people
+        if synchronized:
+            segments = self._dance_editor.get("segments", [])
+            if not 0 <= index < len(segments):
+                return
+            time_s = math.nextafter(float(segments[index]["start"]), -math.inf)
+        cue = self._dance_editor_session.next_move_cue(time_s)
+        self._dance_editor["cue_people"] = cue["dancers"] if cue else []
+        self._dance_editor["cue_name"] = cue["name"] if cue else ""
         self.danceEditorChanged.emit()
 
     def _begin_song_import_source(self, source: str, *, remote: bool = False) -> None:

@@ -1612,71 +1612,19 @@ ApplicationWindow {
                                  && backend.cueDancers.length > 0
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        width: 190 * window.uiScale
+                        width: Math.min(parent.width * 0.72,
+                                        Math.max(190, backend.cueDancers.length * 145)
+                                        * window.uiScale)
                         height: 228 * window.uiScale
                         accent: "#ffe66d"
 
-                        Column {
+                        CueCards {
                             anchors.fill: parent
                             anchors.margins: 10 * window.uiScale
-                            spacing: 5
-
-                            Row {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                spacing: 6
-
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: 7
-                                    height: 7
-                                    radius: 4
-                                    color: "#ffe66d"
-                                }
-
-                                Label {
-                                    text: "UP NEXT"
-                                    color: "#ffffff"
-                                    font.pixelSize: 10 * window.uiScale
-                                    font.weight: Font.Black
-                                    font.letterSpacing: 1.4
-                                }
-                            }
-
-                            Item {
-                                width: parent.width
-                                height: parent.height - 50 * window.uiScale
-
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: parent.width * 0.78
-                                    height: width
-                                    radius: width / 2
-                                    color: "#16ffe66d"
-                                    border.width: 1
-                                    border.color: "#42ffe66d"
-                                }
-
-                                SkeletonView {
-                                    anchors.fill: parent
-                                    anchors.margins: 5
-                                    people: playPage.visible && cuePanel.visible
-                                            ? backend.cueDancers : null
-                                    lineColor: window.playerColor(0)
-                                    mirror: false
-                                    showBoxes: false
-                                    showLabels: false
-                                    lineScale: 1.15
-                                }
-                            }
-
-                            Label {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: String(backend.nextMove || "FOLLOW").replace(/_/g, " ").toUpperCase()
-                                color: "#ffe66d"
-                                font.pixelSize: 11 * window.uiScale
-                                font.weight: Font.Black
-                                font.letterSpacing: 0.8
-                            }
+                            people: playPage.visible && cuePanel.visible
+                                    ? backend.cueDancers : []
+                            moveName: String(backend.nextMove || "FOLLOW").replace(/_/g, " ").toUpperCase()
+                            uiScale: window.uiScale
                         }
                     }
 

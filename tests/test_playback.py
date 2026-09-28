@@ -129,6 +129,25 @@ class PlaybackPolicyTest(unittest.TestCase):
         ).read_text()
         self.assertIn("person.cue_arrows", skeleton)
 
+    def test_editor_and_game_use_separate_per_dancer_cue_cards(self):
+        main = files("opendance").joinpath("qml/Main.qml").read_text()
+        editor = files("opendance").joinpath(
+            "qml/components/DanceEditorDialog.qml"
+        ).read_text()
+        cards = files("opendance").joinpath(
+            "qml/components/CueCards.qml"
+        ).read_text()
+
+        self.assertIn("CueCards {", main)
+        self.assertIn("CueCards {", editor)
+        self.assertIn("muted: true", editor)
+        self.assertIn("previewDanceCue(playhead.value, synchronizedCues, selectedMove)", editor)
+        self.assertIn("position >= dialog.rangeEnd * 1000", editor)
+        self.assertIn('"dancer_index": dialog.selectedCueDancer', editor)
+        self.assertIn("Repeater {", cards)
+        self.assertIn("arrowColor: card.accent", cards)
+        self.assertIn("fitSinglePerson: true", cards)
+
     def test_video_thumbnail_is_extracted_once_then_reused(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

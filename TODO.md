@@ -268,6 +268,13 @@ ones where they conflict.
   portions from choreography cues and scoring without destructively editing the
   source media. Save edits atomically with a recoverable backup, validate role,
   segment, cue, and mask ranges, and preserve unrelated song metadata.
+  - [x] Restyle cue inspection to match gameplay: keep cues in a separate box,
+    render one color-coded cue card per authored dancer so poses/arrows never
+    overlap, mute editor audio by default, and toggle between cues at their
+    actual gameplay lead time versus synchronized with the represented move.
+    In synchronized cue mode, selecting a move must loop that exact move while
+    its cue remains visible. Reuse the same per-dancer cue-card treatment for
+    in-game upcoming cues.
 
 - [x] Integrate song importing into Settings: choose a local video or supported
   URL, automatically prefill embedded/file-name title, artist, and duration,

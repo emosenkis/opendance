@@ -12,6 +12,8 @@ Dialog {
     required property var appBackend
     property real uiScale: 1
     property int selectedMove: -1
+    property int selectedCueDancer: -1
+    property bool synchronizedCues: false
     property real rangeStart: 0
     property real rangeEnd: 0
 
@@ -29,9 +31,25 @@ Dialog {
         rangeEnd = Number(moves[index].end)
         rangeStartField.text = rangeStart.toFixed(2)
         rangeEndField.text = rangeEnd.toFixed(2)
+        selectedCueDancer = moves[index].dancers.length ? moves[index].dancers[0] : -1
         playhead.value = rangeStart
         editorPlayer.position = rangeStart * 1000
-        appBackend.previewDanceMove(index)
+        refreshCue()
+        if (synchronizedCues)
+            editorPlayer.play()
+    }
+
+    function refreshCue() {
+        appBackend.previewDanceCue(playhead.value, synchronizedCues, selectedMove)
+    }
+
+    function toggleCueTiming() {
+        synchronizedCues = !synchronizedCues
+        if (synchronizedCues && selectedMove >= 0) {
+            editorPlayer.position = rangeStart * 1000
+            editorPlayer.play()
+        }
+        refreshCue()
     }
 
     function edit(action, extras) {
@@ -41,7 +59,7 @@ Dialog {
             request.segment = selectedMove
         appBackend.applyDanceEdit(request)
         if (action === "cue" || action === "joint")
-            appBackend.previewDanceMove(selectedMove)
+            refreshCue()
     }
 
     function begin() {
@@ -128,11 +146,17 @@ Dialog {
                         id: editorPlayer
                         source: dialog.value("video", "")
                         videoOutput: editorVideo
-                        audioOutput: AudioOutput { volume: 0.45 }
-                        onPositionChanged: {
+                        audioOutput: AudioOutput { id: editorAudio; volume: 0.45; muted: true }
+                        onPositionChanged: position => {
                             if (!playhead.pressed) {
+                                if (dialog.synchronizedCues && dialog.selectedMove >= 0
+                                        && position >= dialog.rangeEnd * 1000) {
+                                    editorPlayer.position = dialog.rangeStart * 1000
+                                    editorPlayer.play()
+                                }
                                 playhead.value = position / 1000
                                 dialog.appBackend.seekDanceEditor(playhead.value)
+                                dialog.refreshCue()
                             }
                         }
                     }
@@ -180,12 +204,64 @@ Dialog {
                         onMoved: {
                             editorPlayer.position = value * 1000
                             dialog.appBackend.seekDanceEditor(value)
+                            dialog.refreshCue()
                         }
                     }
 
                     Label {
                         text: playhead.value.toFixed(2) + "s"
                         color: "#ffffff"
+                    }
+                }
+
+                GlassPanel {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 172 * dialog.uiScale
+                    accent: "#ffe66d"
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 9 * dialog.uiScale
+                        spacing: 5 * dialog.uiScale
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            NeonButton {
+                                compact: true
+                                text: dialog.synchronizedCues ? "MOVE SYNC" : "GAME TIMING"
+                                accent: dialog.synchronizedCues ? "#ff4fcb" : "#55f7ff"
+                                onClicked: dialog.toggleCueTiming()
+                            }
+
+                            NeonButton {
+                                compact: true
+                                text: editorAudio.muted ? "AUDIO OFF" : "AUDIO ON"
+                                accent: "#9c7cff"
+                                onClicked: editorAudio.muted = !editorAudio.muted
+                            }
+
+                            Label {
+                                Layout.fillWidth: true
+                                text: dialog.synchronizedCues
+                                      ? "Selected move loops with its cue"
+                                      : "Cues appear at gameplay lead time"
+                                color: "#8f9bb1"
+                                font.pixelSize: 9 * dialog.uiScale
+                                horizontalAlignment: Text.AlignRight
+                            }
+                        }
+
+                        CueCards {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            people: dialog.value("cue_people", [])
+                            heading: dialog.synchronizedCues ? "MOVE CUE" : "UP NEXT"
+                            moveName: String(dialog.value("cue_name", "")).replace(/_/g, " ").toUpperCase()
+                            selectedDancer: dialog.selectedCueDancer
+                            uiScale: dialog.uiScale
+                            onDancerSelected: dancerIndex => dialog.selectedCueDancer = dancerIndex
+                        }
                     }
                 }
             }
@@ -256,7 +332,8 @@ Dialog {
                         compact: true
                         text: "TOGGLE ARROW"
                         enabled: dialog.selectedMove >= 0
-                        onClicked: dialog.edit("joint", {"joint": cueJoint.value})
+                        onClicked: dialog.edit("joint", {"joint": cueJoint.value,
+                                                         "dancer_index": dialog.selectedCueDancer})
                     }
                 }
 
@@ -285,14 +362,16 @@ Dialog {
                         compact: true
                         text: "CUE EARLIER"
                         enabled: dialog.selectedMove >= 0
-                        onClicked: dialog.edit("cue", {"delta": -1})
+                        onClicked: dialog.edit("cue", {"delta": -1,
+                                                       "dancer_index": dialog.selectedCueDancer})
                     }
                     NeonButton {
                         Layout.fillWidth: true
                         compact: true
                         text: "CUE LATER"
                         enabled: dialog.selectedMove >= 0
-                        onClicked: dialog.edit("cue", {"delta": 1})
+                        onClicked: dialog.edit("cue", {"delta": 1,
+                                                       "dancer_index": dialog.selectedCueDancer})
                     }
                 }
 
