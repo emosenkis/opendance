@@ -38,7 +38,7 @@ class ImporterTests(unittest.TestCase):
     def test_import_library_uses_the_configured_or_xdg_data_directory(self):
         with TemporaryDirectory() as directory, patch.dict(
             os.environ,
-            {"XDG_DATA_HOME": directory},
+            {"XDG_DATA_HOME": directory, "LOCALAPPDATA": ""},
         ):
             with patch.dict(os.environ, {"OPENDANCE_LIBRARY": ""}):
                 self.assertEqual(
