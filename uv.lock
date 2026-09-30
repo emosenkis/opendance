@@ -1026,6 +1026,11 @@ vision = [
     { name = "ultralytics-opencv-headless" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "numpy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cyclopts", specifier = "==4.24.0" },
@@ -1043,6 +1048,9 @@ requires-dist = [
     { name = "ultralytics-opencv-headless", marker = "extra == 'vision'", specifier = "==8.4.142" },
 ]
 provides-extras = ["vision", "rtmpose"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "numpy", specifier = "==2.5.3" }]
 
 [[package]]
 name = "packaging"
