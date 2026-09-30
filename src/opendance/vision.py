@@ -460,12 +460,15 @@ class PoseEngine:
         if device is None and sys.platform == "darwin" and platform.machine() == "arm64":
             device = "mps"
         elif device is None and sys.platform == "win32":
-            import torch
-
-            if not torch.cuda.is_available() and torch.xpu.is_available():
-                device = "xpu"
-            elif not torch.cuda.is_available():
-                imgsz = min(imgsz, 480)
+            try:
+                import torch
+            except ModuleNotFoundError:
+                pass
+            else:
+                if not torch.cuda.is_available() and torch.xpu.is_available():
+                    device = "xpu"
+                elif not torch.cuda.is_available():
+                    imgsz = min(imgsz, 480)
         self.imgsz = imgsz
         self.device = device
         self.max_people = max_people

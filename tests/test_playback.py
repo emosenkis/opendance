@@ -512,7 +512,10 @@ class PlaybackPolicyTest(unittest.TestCase):
         ):
             add_homebrew()
             add_homebrew()
-            self.assertEqual(os.environ["PATH"], "/opt/homebrew/bin:/usr/bin")
+            self.assertEqual(
+                os.environ["PATH"],
+                os.pathsep.join((str(Path("/opt/homebrew/bin")), "/usr/bin")),
+            )
 
     def test_bundled_audio_is_compressed_and_present(self):
         package = files("opendance")

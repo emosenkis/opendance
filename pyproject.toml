@@ -29,7 +29,7 @@ rtmpose = [
 ]
 
 [dependency-groups]
-dev = ["numpy==2.5.3"]
+dev = ["numpy==2.5.3", "opencv-python-headless==5.0.0.93"]
 
 # rtmlib declares both GUI OpenCV wheels and CPU ONNX Runtime. OpenDance uses
 # the compatible headless OpenCV and GPU runtime directly instead.

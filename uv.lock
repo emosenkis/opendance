@@ -1029,6 +1029,7 @@ vision = [
 [package.dev-dependencies]
 dev = [
     { name = "numpy" },
+    { name = "opencv-python-headless" },
 ]
 
 [package.metadata]
@@ -1050,7 +1051,10 @@ requires-dist = [
 provides-extras = ["vision", "rtmpose"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "numpy", specifier = "==2.5.3" }]
+dev = [
+    { name = "numpy", specifier = "==2.5.3" },
+    { name = "opencv-python-headless", specifier = "==5.0.0.93" },
+]
 
 [[package]]
 name = "packaging"
