@@ -87,6 +87,15 @@ class SleepInhibitor:
                 continuous | system_required | display_required
             )
             self._windows_active = True
+        elif sys.platform == "darwin" and shutil.which("caffeinate"):
+            try:
+                self._process = subprocess.Popen(
+                    ["caffeinate", "-dims"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError:
+                self._process = None
         elif sys.platform.startswith("linux") and shutil.which("systemd-inhibit"):
             try:
                 self._process = subprocess.Popen(

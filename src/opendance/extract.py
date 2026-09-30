@@ -1631,20 +1631,26 @@ def _device(value: str) -> str | int:
 
 
 def diagnostics() -> int:
-    """Verify that a distribution contains CUDA PyTorch, weights, and inference."""
+    """Verify that a distribution contains accelerated PyTorch, weights, and inference."""
 
     import numpy as np
     import torch
 
     model = Path(os.environ.get("OPENDANCE_MODEL", ""))
-    available = torch.cuda.is_available()
+    macos = sys.platform == "darwin"
+    accelerator_built = (
+        torch.backends.mps.is_built() if macos else bool(torch.version.cuda)
+    )
+    available = torch.backends.mps.is_available() if macos else torch.cuda.is_available()
     print(f"PyTorch: {torch.__version__}")
-    print(f"CUDA runtime: {torch.version.cuda or 'none'}")
-    print(f"CUDA available: {available}")
+    print(f"{'MPS' if macos else 'CUDA'} available: {available}")
     if available:
-        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        gpu = torch.backends.mps.get_name() if macos else torch.cuda.get_device_name(0)
+        print(f"GPU: {gpu}")
+    elif not macos:
+        print(f"CUDA runtime: {torch.version.cuda or 'none'}")
     print(f"Bundled model: {model.is_file()}")
-    if not torch.version.cuda or not model.is_file():
+    if not accelerator_built or not model.is_file():
         return 1
     result = PoseEngine(
         model, device="cpu", imgsz=320, max_people=1, smooth_frames=0

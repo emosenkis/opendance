@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import math
 import os
+import platform
 from pathlib import Path
+import sys
 import threading
 import time
 from typing import Any
@@ -456,7 +458,11 @@ class PoseEngine:
 
         self.model_name = model_name
         self.imgsz = imgsz
-        self.device = device
+        self.device = (
+            "mps"
+            if device is None and sys.platform == "darwin" and platform.machine() == "arm64"
+            else device
+        )
         self.max_people = max_people
         self.smooth_frames = smooth_frames
         self._pose_filter = (

@@ -52,6 +52,11 @@ class PoseDiagnosticsTest(unittest.TestCase):
 
         self.assertEqual(result["device"], "cuda:0")
 
+    @patch("opendance.vision.platform.machine", return_value="arm64")
+    @patch("opendance.vision.sys.platform", "darwin")
+    def test_apple_silicon_defaults_to_mps(self, _machine):
+        self.assertEqual(PoseEngine("unused.pt").device, "mps")
+
     def test_player_detection_requires_confidence_count_and_body_coverage(self):
         self.assertTrue(is_player_detection(player_detection()))
         self.assertTrue(is_player_detection(player_detection(visible=range(5, 17))))

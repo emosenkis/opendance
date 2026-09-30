@@ -1,6 +1,6 @@
 # OpenDance
 
-OpenDance is a local, camera-powered dance game for Windows and Linux. It uses
+OpenDance is a local, camera-powered dance game for macOS, Windows, and Linux. It uses
 Qt Quick for the game UI and Ultralytics YOLO26 Pose for multi-person tracking,
 with an experimental RTMPose Body backend available as an opt-in.
 Inference runs on a latest-frame worker thread in the game process: camera
@@ -15,7 +15,7 @@ a generated neon coach, and a live pose mini-view.
 ## Run
 
 Python 3.12 is recommended. [`uv`](https://docs.astral.sh/uv/) gives identical
-locked installs on Windows and Linux:
+locked installs on macOS, Windows, and Linux:
 
 ```console
 uv sync --extra vision
@@ -118,6 +118,13 @@ For Windows, download the release's `OpenDance-...-setup.exe` and every
 matching `.bin` file into one folder, then run the installer. It installs per
 user and does not require administrator access or a system Python/CUDA toolkit.
 
+For an Apple-silicon Mac (M1 through M4), download
+`OpenDance-...-macos-arm64.zip`, verify it against
+`SHA256SUMS-macos-arm64.txt`, and drag `OpenDance.app` to Applications. The
+release is ad-hoc signed because this project does not have Apple notarization
+credentials; on first launch, Control-click the app, choose **Open**, and then
+approve camera access. The bundled PyTorch build uses the Mac's MPS GPU backend.
+
 Linux releases publish the complete CUDA image to
 `ghcr.io/emosenkis/opendance:VERSION` and attach the exact image name to the GitHub
 release. It contains the userspace dependencies; use the Podman invocation in
@@ -144,12 +151,18 @@ Maintainers can produce the same assets locally with `uv` and `curl` installed
 (`Inno Setup 6` is additionally required on Windows):
 
 ```powershell
-packaging\build_windows.ps1 -Version 0.1.0
+packaging\build_windows.ps1 -Version 0.2.0
 ```
 
-Pushing a version tag matching `v*` builds the CUDA Windows installer and Linux
-container in GitHub Actions, then publishes only after both platforms succeed.
-The ordinary CI workflow runs the core checks on Linux and Windows without
+On an Apple-silicon Mac:
+
+```console
+packaging/build_macos.sh 0.2.0
+```
+
+Pushing a version tag matching `v*` builds the Apple-silicon app, CUDA Windows
+installer, and Linux container in GitHub Actions, then publishes only after all
+platforms succeed. The ordinary CI workflow runs the core checks on Linux and Windows without
 downloading the multi-gigabyte GPU stack.
 
 ## Import choreography

@@ -219,6 +219,32 @@ class PlaybackPolicyTest(unittest.TestCase):
         popen.assert_called_once()
         process.terminate.assert_called_once_with()
 
+    def test_sleep_inhibitor_uses_caffeinate_on_macos(self):
+        process = SimpleNamespace(terminate=Mock())
+        inhibitor = SleepInhibitor()
+
+        with (
+            patch("opendance.app.sys.platform", "darwin"),
+            patch("opendance.app.shutil.which", return_value="caffeinate"),
+            patch("opendance.app.subprocess.Popen", return_value=process) as popen,
+        ):
+            inhibitor.acquire()
+            inhibitor.release()
+
+        self.assertEqual(popen.call_args.args[0], ["caffeinate", "-dims"])
+        process.terminate.assert_called_once_with()
+
+    def test_macos_release_is_arm_native_and_camera_enabled(self):
+        spec = Path("packaging/opendance.spec").read_text(encoding="utf-8")
+        build = Path("packaging/build_macos.sh").read_text(encoding="utf-8")
+        workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+
+        self.assertIn('"NSCameraUsageDescription"', spec)
+        self.assertIn('bundle_identifier="io.github.emosenkis.opendance"', spec)
+        self.assertIn('"$(uname -m)" == arm64', build)
+        self.assertIn('file "$app/Contents/MacOS/OpenDance" | grep -q arm64', build)
+        self.assertIn("runs-on: macos-15", workflow)
+
     def test_wake_resumes_media_at_current_song_time(self):
         player = SimpleNamespace(
             source=lambda: SimpleNamespace(isEmpty=lambda: False),

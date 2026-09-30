@@ -95,8 +95,26 @@ jobs:
           $PSNativeCommandUseErrorActionPreference = $true
           Get-ChildItem release | ForEach-Object { gh release upload $env:RELEASE_TAG $_.FullName --clobber }
 
+  macos:
+    needs: prepare
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: Build Apple-silicon application
+        run: packaging/build_macos.sh "${RELEASE_TAG#v}"
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" release/* --clobber
+
   publish:
-    needs: [linux, windows]
+    needs: [linux, windows, macos]
     runs-on: ubuntu-22.04
     steps:
       - name: Publish release
