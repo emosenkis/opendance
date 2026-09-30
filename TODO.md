@@ -363,9 +363,10 @@ ones where they conflict.
 ## Distribution and repository
 
 - [x] Add core Linux/Windows CI.
-- [x] Add a native Apple-silicon macOS release with an `.app` bundle, bundled
-  pose model, MPS inference, camera permission metadata, diagnostics, ad-hoc
-  signing verification, checksums, and automated release upload.
+- [x] Add a native Apple-silicon macOS DMG with an `.app` bundle, bundled pose
+  model, MPS inference, an explicit camera permission request and recovery
+  guidance, diagnostics, ad-hoc signing verification, checksums, and automated
+  release upload.
 - [x] Add automated CUDA-capable Windows per-user installer builds containing
   Python, Qt, model code, CUDA userspace dependencies, and the pose checkpoint.
 - [x] Add a Linux CUDA container release and a local self-contained split-bundle

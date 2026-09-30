@@ -45,6 +45,25 @@ codesign --verify --deep --strict "$app"
 "$app/Contents/MacOS/opendance-extract" --diagnostics
 
 mkdir -p release
-archive="release/OpenDance-$version-macos-arm64.zip"
-ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
-shasum -a 256 "$archive" | sed 's|  release/|  |' > release/SHA256SUMS-macos-arm64.txt
+dmg="release/OpenDance-$version-macos-arm64.dmg"
+dmg_stage="$(mktemp -d "$root/build/opendance-dmg.XXXXXX")"
+mount_point="$(mktemp -d "$root/build/opendance-mount.XXXXXX")"
+mounted=false
+cleanup() {
+  if $mounted; then hdiutil detach "$mount_point" -quiet || true; fi
+  rm -rf "$dmg_stage" "$mount_point"
+}
+trap cleanup EXIT
+
+ditto "$app" "$dmg_stage/OpenDance.app"
+ln -s /Applications "$dmg_stage/Applications"
+hdiutil create -volname "OpenDance $version" -srcfolder "$dmg_stage" -ov -format UDZO "$dmg"
+hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount_point" -quiet
+mounted=true
+test -d "$mount_point/OpenDance.app"
+test -L "$mount_point/Applications"
+file "$mount_point/OpenDance.app/Contents/MacOS/OpenDance" | grep -q arm64
+codesign --verify --deep --strict "$mount_point/OpenDance.app"
+hdiutil detach "$mount_point" -quiet
+mounted=false
+shasum -a 256 "$dmg" | sed 's|  release/|  |' > release/SHA256SUMS-macos-arm64.txt

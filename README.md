@@ -119,11 +119,13 @@ matching `.bin` file into one folder, then run the installer. It installs per
 user and does not require administrator access or a system Python/CUDA toolkit.
 
 For an Apple-silicon Mac (M1 through M4), download
-`OpenDance-...-macos-arm64.zip`, verify it against
-`SHA256SUMS-macos-arm64.txt`, and drag `OpenDance.app` to Applications. The
+`OpenDance-...-macos-arm64.dmg`, verify it against
+`SHA256SUMS-macos-arm64.txt`, open it, and drag `OpenDance.app` to Applications. The
 release is ad-hoc signed because this project does not have Apple notarization
 credentials; on first launch, Control-click the app, choose **Open**, and then
-approve camera access. The bundled PyTorch build uses the Mac's MPS GPU backend.
+approve OpenDance's camera request. If access was previously denied, enable it
+under **System Settings → Privacy & Security → Camera**. The bundled PyTorch build
+uses the Mac's MPS GPU backend.
 
 Linux releases publish the complete CUDA image to
 `ghcr.io/emosenkis/opendance:VERSION` and attach the exact image name to the GitHub
@@ -157,7 +159,7 @@ packaging\build_windows.ps1 -Version 0.2.0
 On an Apple-silicon Mac:
 
 ```console
-packaging/build_macos.sh 0.2.0
+packaging/build_macos.sh 0.2.1
 ```
 
 Pushing a version tag matching `v*` builds the Apple-silicon app, CUDA Windows

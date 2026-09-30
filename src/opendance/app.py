@@ -21,6 +21,7 @@ from typing import Any
 from cyclopts import App
 from PySide6.QtCore import (
     Property,
+    QCameraPermission,
     QObject,
     QSettings,
     QTimer,
@@ -599,6 +600,7 @@ class Backend(QObject):
         self._coach_sink: QVideoSink | None = None
         self._capture_session = QMediaCaptureSession(self)
         self._camera: QCamera | None = None
+        self._camera_permission_pending = False
         self._source_player = QMediaPlayer(self)
         self._source_audio = QAudioOutput(self)
         self._source_audio.setMuted(True)
@@ -1528,6 +1530,9 @@ class Backend(QObject):
         if self._pose_thread:
             self._pose_thread.reset()
         if self._selected_source in self._camera_devices:
+            if not self._camera_access_allowed():
+                self._capture_session.setCamera(None)
+                return
             self._camera = QCamera(self._camera_devices[self._selected_source], self)
             self._capture_session.setCamera(self._camera)
             self._capture_session.setVideoSink(self._capture_sink)
@@ -1549,6 +1554,38 @@ class Backend(QObject):
         else:
             self._capture_session.setCamera(None)
             self._model_status = "No camera found"
+
+    def _camera_access_allowed(self) -> bool:
+        if sys.platform != "darwin":
+            return True
+        app = QApplication.instance()
+        if app is None:
+            return False
+        permission = QCameraPermission()
+        status = app.checkPermission(permission)
+        if status == Qt.PermissionStatus.Granted:
+            return True
+        if status == Qt.PermissionStatus.Undetermined:
+            self._set_model_status("Allow camera access to start dancing")
+            if not self._camera_permission_pending:
+                self._camera_permission_pending = True
+                app.requestPermission(permission, self, self._camera_permission_changed)
+            return False
+        self._set_model_status(
+            "Camera unavailable: enable OpenDance in System Settings → "
+            "Privacy & Security → Camera"
+        )
+        return False
+
+    def _camera_permission_changed(self, permission: QCameraPermission) -> None:
+        self._camera_permission_pending = False
+        if permission.status() == Qt.PermissionStatus.Granted:
+            self._apply_source()
+        else:
+            self._set_model_status(
+                "Camera unavailable: enable OpenDance in System Settings → "
+                "Privacy & Security → Camera"
+            )
 
     def _stop_source(self) -> None:
         if self._camera:

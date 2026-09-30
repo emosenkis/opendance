@@ -243,7 +243,29 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertIn('bundle_identifier="io.github.emosenkis.opendance"', spec)
         self.assertIn('"$(uname -m)" == arm64', build)
         self.assertIn('file "$app/Contents/MacOS/OpenDance" | grep -q arm64', build)
+        self.assertIn('hdiutil create', build)
+        self.assertIn('OpenDance-$version-macos-arm64.dmg', build)
         self.assertIn("runs-on: macos-15", workflow)
+
+    def test_macos_camera_waits_for_explicit_permission(self):
+        app = Mock()
+        app.checkPermission.return_value = Qt.PermissionStatus.Undetermined
+        backend = Backend.__new__(Backend)
+        backend._camera_permission_pending = False
+        backend._set_model_status = Mock()
+        backend._camera_permission_changed = Mock()
+
+        with (
+            patch("opendance.app.sys.platform", "darwin"),
+            patch("opendance.app.QApplication.instance", return_value=app),
+        ):
+            self.assertFalse(backend._camera_access_allowed())
+            self.assertFalse(backend._camera_access_allowed())
+
+        app.requestPermission.assert_called_once()
+        backend._set_model_status.assert_called_with(
+            "Allow camera access to start dancing"
+        )
 
     def test_wake_resumes_media_at_current_song_time(self):
         player = SimpleNamespace(
