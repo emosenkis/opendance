@@ -1534,6 +1534,11 @@ class Backend(QObject):
                 self._capture_session.setCamera(None)
                 return
             self._camera = QCamera(self._camera_devices[self._selected_source], self)
+            self._camera.errorOccurred.connect(
+                lambda _error, message: self._set_model_status(
+                    f"Camera unavailable: {message or 'check camera privacy settings'}"
+                )
+            )
             self._capture_session.setCamera(self._camera)
             self._capture_session.setVideoSink(self._capture_sink)
             self._ensure_pose_thread()

@@ -38,15 +38,15 @@ exclude-dependencies = [
     { package = { name = "rtmlib", version = "0.0.16" }, dependencies = ["onnxruntime", "opencv-contrib-python", "opencv-python"] },
 ]
 
-# PyPI's Windows torch wheel is CPU-only. Linux's PyPI wheel already carries
-# CUDA 13.0, so only Windows needs the dedicated upstream index.
+# CUDA 12.6 retains pre-Turing Windows laptop support. The Intel packaging job
+# replaces these two pinned wheels with their official XPU variants.
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
-torchvision = [{ index = "pytorch-cu130", marker = "sys_platform == 'win32'" }]
+torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
 
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
 explicit = true
 
 [project.scripts]

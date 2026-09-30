@@ -369,6 +369,10 @@ ones where they conflict.
   signing verification, checksums, and automated release upload.
 - [x] Add automated CUDA-capable Windows per-user installer builds containing
   Python, Qt, model code, CUDA userspace dependencies, and the pose checkpoint.
+- [x] Add separate NVIDIA CUDA 12.6 and Intel XPU Windows installers; retain CPU
+  fallback for 8th-gen-and-newer Intel laptops, auto-select supported Intel
+  Arc/Core Ultra graphics, label assets clearly, and enforce Qt's Windows 10
+  1809 minimum.
 - [x] Add a Linux CUDA container release and a local self-contained split-bundle
   build/install script instead of publishing a pointless CPU-only AppImage.
 - [x] Ensure local container contexts exclude user videos, songs, environments,

@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$Version = "")
+param(
+  [string]$Version = "",
+  [ValidateSet("nvidia", "intel")][string]$Accelerator = "nvidia"
+)
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -10,6 +13,10 @@ $env:UV_CACHE_DIR = Join-Path $Root "build\uv-cache"
 
 uv python install 3.12
 uv sync --frozen --extra vision --no-dev --python 3.12
+if ($Accelerator -eq "intel") {
+  uv pip install --python $Python --reinstall --index https://download.pytorch.org/whl/xpu `
+    "torch==2.14.0+xpu" "torchvision==0.29.0+xpu"
+}
 uv pip install --python $Python "pyinstaller==6.20.0"
 & $Python -m unittest discover -s tests -v
 if ($LASTEXITCODE) { throw "Tests failed" }
@@ -23,7 +30,12 @@ curl.exe -fL --retry 3 -o $Model https://github.com/ultralytics/assets/releases/
 $Hash = (Get-FileHash -Algorithm SHA256 $Model).Hash.ToLowerInvariant()
 if ($Hash -ne "eb3bb8268828aeaf515cec23a4bfafd793944a86fe9af94ba7823609c14522a9") { throw "Model checksum mismatch" }
 
-& $Python -c 'import torch; assert torch.version.cuda == "13.0", torch.__version__'
+if ($Accelerator -eq "intel") {
+  & $Python -c 'import torch; assert torch.__version__ == "2.14.0+xpu"; assert torch.xpu._is_compiled()'
+} else {
+  & $Python -c 'import torch; assert torch.version.cuda == "12.6", torch.__version__'
+}
+if ($LASTEXITCODE) { throw "$Accelerator PyTorch runtime is unavailable" }
 uv cache clean
 $env:OPENDANCE_BUNDLE_MODEL = $Model
 & $Python packaging\make_icon.py build\opendance.ico
@@ -39,10 +51,10 @@ $Compiler = @(
   "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $Compiler) { throw "Install Inno Setup 6 first" }
-& $Compiler "/DAppVersion=$Version" packaging\windows.iss
+& $Compiler "/DAppVersion=$Version" "/DAccelerator=$Accelerator" packaging\windows.iss
 if ($LASTEXITCODE) { throw "Inno Setup failed" }
 
-$Assets = Get-ChildItem release\OpenDance-*-windows-x86_64-setup*
+$Assets = Get-ChildItem "release\OpenDance-*-windows-x86_64-$Accelerator-setup*"
 if ($Assets | Where-Object Length -gt 1999000000) { throw "Release asset exceeds 2 GB" }
 $Lines = $Assets | ForEach-Object { "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $_).Hash.ToLowerInvariant(), $_.Name }
-$Lines | Set-Content -Encoding ascii release\SHA256SUMS-windows-x86_64.txt
+$Lines | Set-Content -Encoding ascii "release\SHA256SUMS-windows-x86_64-$Accelerator.txt"

@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -56,6 +57,24 @@ class PoseDiagnosticsTest(unittest.TestCase):
     @patch("opendance.vision.sys.platform", "darwin")
     def test_apple_silicon_defaults_to_mps(self, _machine):
         self.assertEqual(PoseEngine("unused.pt").device, "mps")
+
+    def test_windows_selects_xpu_or_reduces_cpu_work(self):
+        torch = SimpleNamespace(
+            cuda=SimpleNamespace(is_available=lambda: False),
+            xpu=SimpleNamespace(is_available=lambda: True),
+        )
+        with patch("opendance.vision.sys.platform", "win32"), patch.dict(
+            sys.modules, {"torch": torch}
+        ):
+            self.assertEqual(PoseEngine("unused.pt").device, "xpu")
+
+        torch.xpu.is_available = lambda: False
+        with patch("opendance.vision.sys.platform", "win32"), patch.dict(
+            sys.modules, {"torch": torch}
+        ):
+            engine = PoseEngine("unused.pt")
+            self.assertIsNone(engine.device)
+            self.assertEqual(engine.imgsz, 480)
 
     def test_player_detection_requires_confidence_count_and_body_coverage(self):
         self.assertTrue(is_player_detection(player_detection()))

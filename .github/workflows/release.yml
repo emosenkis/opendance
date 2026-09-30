@@ -73,6 +73,9 @@ jobs:
   windows:
     needs: prepare
     runs-on: windows-latest
+    strategy:
+      matrix:
+        accelerator: [nvidia, intel]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,11 +85,11 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: false
       - run: choco install innosetup --no-progress -y
-      - name: Build CUDA installer
+      - name: Build ${{ matrix.accelerator }} installer
         shell: pwsh
         run: |
           $Version = $env:RELEASE_TAG.TrimStart('v')
-          packaging\build_windows.ps1 -Version $Version
+          packaging\build_windows.ps1 -Version $Version -Accelerator ${{ matrix.accelerator }}
       - name: Upload release assets
         shell: pwsh
         env:

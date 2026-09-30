@@ -248,6 +248,18 @@ class PlaybackPolicyTest(unittest.TestCase):
         self.assertIn('OpenDance-$version-macos-arm64.dmg', build)
         self.assertIn("runs-on: macos-15", workflow)
 
+    def test_windows_releases_cover_nvidia_intel_and_supported_os(self):
+        project = Path("pyproject.toml").read_text(encoding="utf-8")
+        build = Path("packaging/build_windows.ps1").read_text(encoding="utf-8")
+        installer = Path("packaging/windows.iss").read_text(encoding="utf-8")
+        workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+
+        self.assertIn('url = "https://download.pytorch.org/whl/cu126"', project)
+        self.assertIn("https://download.pytorch.org/whl/xpu", build)
+        self.assertIn('[ValidateSet("nvidia", "intel")]', build)
+        self.assertIn("MinVersion=10.0.17763", installer)
+        self.assertIn("accelerator: [nvidia, intel]", workflow)
+
     def test_macos_camera_waits_for_explicit_permission(self):
         app = Mock()
         app.checkPermission.return_value = Qt.PermissionStatus.Undetermined

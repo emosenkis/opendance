@@ -67,16 +67,21 @@ Controls:
 
 ## Windows GPU
 
-The locked vision install includes PyTorch. Confirm that the RTX GPU is visible:
+The NVIDIA installer uses CUDA 12.6 for broad laptop compatibility, including
+Pascal and newer GPUs, and falls back to CPU inference when CUDA is unavailable.
+Confirm that the NVIDIA GPU is visible:
 
 ```console
 uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name())"
 ```
 
 If it reports `False`, update the NVIDIA driver and rerun `uv sync --reinstall
---extra vision`; the lock file already selects CUDA PyTorch on Windows and
-Linux. Set a different compatible pose checkpoint with `OPENDANCE_MODEL` when
-required.
+--extra vision`; the lock file selects CUDA PyTorch on Windows. The separate
+Intel installer uses PyTorch XPU and automatically selects supported Intel Arc
+graphics on Windows 11. Official XPU support covers Arc A/B and the Arc graphics
+in Core Ultra processors; 8th–13th-gen Intel integrated graphics use a reduced
+resolution CPU fallback. Set a different compatible pose checkpoint with
+`OPENDANCE_MODEL` when required.
 
 ## Immutable Linux
 
@@ -105,8 +110,9 @@ video-file input do not need a webcam device passed through.
 
 ## Installable releases
 
-Release builds include Python, Qt, PyTorch, the CUDA 13.0 user-space runtime,
-YOLO, and the pose checkpoint. They still require an NVIDIA GPU with a current
+Release builds include Python, Qt, PyTorch, YOLO, and the pose checkpoint. The
+NVIDIA installer includes the CUDA 12.6 user-space runtime; the Intel installer
+includes the XPU runtime. Hardware acceleration still requires a current vendor
 driver; no application can safely bundle the kernel-level display/GPU driver.
 After a Windows installation, run
 `& "$env:LOCALAPPDATA\Programs\OpenDance\opendance-extract.exe" --diagnostics`
@@ -114,9 +120,11 @@ in PowerShell to see the compiled CUDA runtime and whether the driver exposes a
 GPU. The same command is available as bare `opendance-extract --diagnostics` in
 the Linux container and local bundle.
 
-For Windows, download the release's `OpenDance-...-setup.exe` and every
-matching `.bin` file into one folder, then run the installer. It installs per
-user and does not require administrator access or a system Python/CUDA toolkit.
+For Windows 10/11 with NVIDIA graphics, download the release's matching
+`windows-x86_64-nvidia-setup.exe` and `.bin` files. For Windows 11 with supported
+Intel Arc graphics, use the corresponding `intel` files. Keep one variant's
+files together and run its `.exe`; it installs per user without administrator
+access or a system Python/CUDA/XPU toolkit. Either build can fall back to CPU.
 
 For an Apple-silicon Mac (M1 through M4), download
 `OpenDance-...-macos-arm64.dmg`, verify it against
@@ -154,7 +162,8 @@ Maintainers can produce the same assets locally with `uv` and `curl` installed
 (`Inno Setup 6` is additionally required on Windows):
 
 ```powershell
-packaging\build_windows.ps1 -Version 0.2.0
+packaging\build_windows.ps1 -Version 0.2.2 -Accelerator nvidia
+packaging\build_windows.ps1 -Version 0.2.2 -Accelerator intel
 ```
 
 On an Apple-silicon Mac:
@@ -163,8 +172,8 @@ On an Apple-silicon Mac:
 packaging/build_macos.sh 0.2.2
 ```
 
-Pushing a version tag matching `v*` builds the Apple-silicon app, CUDA Windows
-installer, and Linux container in GitHub Actions, then publishes only after all
+Pushing a version tag matching `v*` builds the Apple-silicon app, NVIDIA and
+Intel Windows installers, and Linux container in GitHub Actions, then publishes only after all
 platforms succeed. The ordinary CI workflow runs the core checks on Linux and Windows without
 downloading the multi-gigabyte GPU stack.
 

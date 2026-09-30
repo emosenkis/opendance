@@ -1638,16 +1638,34 @@ def diagnostics() -> int:
 
     model = Path(os.environ.get("OPENDANCE_MODEL", ""))
     macos = sys.platform == "darwin"
+    xpu = not macos and torch.xpu._is_compiled()
+    accelerator = "MPS" if macos else "XPU" if xpu else "CUDA"
     accelerator_built = (
-        torch.backends.mps.is_built() if macos else bool(torch.version.cuda)
+        torch.backends.mps.is_built()
+        if macos
+        else torch.xpu._is_compiled()
+        if xpu
+        else bool(torch.version.cuda)
     )
-    available = torch.backends.mps.is_available() if macos else torch.cuda.is_available()
+    available = (
+        torch.backends.mps.is_available()
+        if macos
+        else torch.xpu.is_available()
+        if xpu
+        else torch.cuda.is_available()
+    )
     print(f"PyTorch: {torch.__version__}")
-    print(f"{'MPS' if macos else 'CUDA'} available: {available}")
+    print(f"{accelerator} available: {available}")
     if available:
-        gpu = torch.backends.mps.get_name() if macos else torch.cuda.get_device_name(0)
+        gpu = (
+            torch.backends.mps.get_name()
+            if macos
+            else torch.xpu.get_device_name(0)
+            if xpu
+            else torch.cuda.get_device_name(0)
+        )
         print(f"GPU: {gpu}")
-    elif not macos:
+    elif not macos and not xpu:
         print(f"CUDA runtime: {torch.version.cuda or 'none'}")
     print(f"Bundled model: {model.is_file()}")
     if not accelerator_built or not model.is_file():

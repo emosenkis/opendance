@@ -29,4 +29,5 @@ jobs:
       - run: uv run python -m unittest discover -s tests -v
       - name: Check Windows vision resolves CUDA PyTorch
         if: runner.os == 'Linux'
-        run: uv tree --frozen --python-platform windows | grep -F 'torch v2.14.0+cu130'
+        run: |
+          uv tree --frozen --python-platform windows | grep -F 'torch v2.14.0+cu126'
