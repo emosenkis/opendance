@@ -125,7 +125,8 @@ release is ad-hoc signed because this project does not have Apple notarization
 credentials; on first launch, Control-click the app, choose **Open**, and then
 approve OpenDance's camera request. If access was previously denied, enable it
 under **System Settings → Privacy & Security → Camera**. The bundled PyTorch build
-uses the Mac's MPS GPU backend.
+uses the Mac's MPS GPU backend. The app also discovers helpers installed in the
+Apple-silicon Homebrew directory, including `yt-dlp`, when launched from Finder.
 
 Linux releases publish the complete CUDA image to
 `ghcr.io/emosenkis/opendance:VERSION` and attach the exact image name to the GitHub
@@ -159,7 +160,7 @@ packaging\build_windows.ps1 -Version 0.2.0
 On an Apple-silicon Mac:
 
 ```console
-packaging/build_macos.sh 0.2.1
+packaging/build_macos.sh 0.2.2
 ```
 
 Pushing a version tag matching `v*` builds the Apple-silicon app, CUDA Windows

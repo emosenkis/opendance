@@ -20,6 +20,13 @@ def _ensure_console_streams() -> None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 
+def _add_macos_homebrew_to_path() -> None:
+    homebrew_bin = Path("/opt/homebrew/bin")
+    path = os.environ.get("PATH", "").split(os.pathsep)
+    if sys.platform == "darwin" and homebrew_bin.is_dir() and str(homebrew_bin) not in path:
+        os.environ["PATH"] = os.pathsep.join((str(homebrew_bin), *path))
+
+
 def _diagnostics() -> int:
     from opendance.extract import diagnostics
 
@@ -28,6 +35,7 @@ def _diagnostics() -> int:
 
 def main() -> int:
     _ensure_console_streams()
+    _add_macos_homebrew_to_path()
     model = _bundle_root() / "models" / "yolo26n-pose.pt"
     if model.is_file():
         os.environ.setdefault("OPENDANCE_MODEL", str(model))

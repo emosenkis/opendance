@@ -1,5 +1,6 @@
 from importlib.resources import files
 import json
+import os
 from pathlib import Path
 import runpy
 import sys
@@ -487,6 +488,19 @@ class PlaybackPolicyTest(unittest.TestCase):
             sys.stdout, sys.stderr = original_stdout, original_stderr
             for stream in replacements:
                 stream.close()
+
+    def test_macos_entrypoint_adds_homebrew_helpers_to_path_once(self):
+        add_homebrew = runpy.run_path("packaging/entrypoint.py")[
+            "_add_macos_homebrew_to_path"
+        ]
+        with (
+            patch("sys.platform", "darwin"),
+            patch.object(Path, "is_dir", return_value=True),
+            patch.dict(os.environ, {"PATH": "/usr/bin"}),
+        ):
+            add_homebrew()
+            add_homebrew()
+            self.assertEqual(os.environ["PATH"], "/opt/homebrew/bin:/usr/bin")
 
     def test_bundled_audio_is_compressed_and_present(self):
         package = files("opendance")
